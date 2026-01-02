@@ -53,13 +53,13 @@ This will:
 
 Use after understanding an area well, or to re-capture after major changes.
 
-### Refresh after code changes
+### Sync after code changes
 
 ```bash
-/intent-refresh
+/intent-sync
 ```
 
-Detects which AGENTS.md files are affected by recent changes and re-captures them.
+Detects which AGENTS.md files are affected by recent changes and proposes updates.
 
 ## Commands
 
@@ -67,7 +67,7 @@ Detects which AGENTS.md files are affected by recent changes and re-captures the
 |---------|-------------|
 | `/intent-init` | Full bootstrap: analyze, capture all nodes, install hook |
 | `/intent-capture [path]` | Capture single directory (default: cwd) |
-| `/intent-refresh` | Update nodes affected by recent changes |
+| `/intent-sync` | Update nodes affected by recent changes |
 
 ## Skills
 

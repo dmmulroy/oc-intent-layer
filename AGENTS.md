@@ -17,7 +17,7 @@ Skills (invoke via `@skill-name`):
 Commands (invoke via `/command`):
 - `/intent-init` — Full bootstrap: chunk analysis + capture all nodes + install pre-push hook
 - `/intent-capture [path]` — Capture single node
-- `/intent-refresh` — Update nodes affected by recent code changes
+- `/intent-sync` — Update nodes affected by recent code changes
 
 **Invariants**:
 - Capture order is always leaf-first (children before parents)
@@ -43,9 +43,9 @@ Capture single node after understanding area:
 /intent-capture ./services/payment/
 ```
 
-Refresh after code changes (or when pre-push hook warns):
+Sync after code changes (or when pre-push hook warns):
 ```
-/intent-refresh
+/intent-sync
 ```
 
 ## Anti-Patterns
@@ -61,7 +61,7 @@ Refresh after code changes (or when pre-push hook warns):
 - .opencode/skill/intent-capture/SKILL.md — interview + generation
 - .opencode/command/intent-init.md — bootstrap orchestration
 - .opencode/command/intent-capture.md — single node command
-- .opencode/command/intent-refresh.md — maintenance command
+- .opencode/command/intent-sync.md — maintenance command
 
 ## Outlinks
 

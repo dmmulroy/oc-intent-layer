@@ -77,7 +77,7 @@ Parents summarize child AGENTS.md—not raw code. This enables progressive discl
 └── command/
     ├── intent-init.md             # /intent-init — full bootstrap + hook
     ├── intent-capture.md          # /intent-capture [path] — single node
-    └── intent-refresh.md          # /intent-refresh — update stale nodes
+    └── intent-sync.md              # /intent-sync — update stale nodes
 ```
 
 ---
@@ -372,7 +372,7 @@ STALE=$(echo -e "$STALE" | sort -u | grep .)
 
 echo "Intent nodes may need refresh:"
 echo -e "$STALE"
-echo "Run: /intent-refresh"
+echo "Run: /intent-sync"
 read -p "Push anyway? [y/N] " -r
 [[ $REPLY =~ ^[Yy]$ ]] && exit 0
 exit 1
@@ -392,12 +392,12 @@ agent: build
 Run @intent-capture for: $ARGUMENTS (default: current directory)
 ```
 
-### `/intent-refresh`
+### `/intent-sync`
 
 ```markdown
 ---
-name: intent-refresh
-description: Refresh intent nodes after code changes
+name: intent-sync
+description: Sync intent nodes after code changes
 agent: build
 ---
 
@@ -485,7 +485,7 @@ Agents surface missing context through usage:
 - Refined pitfalls
 - Dead code candidates
 
-Feed discoveries back → `/intent-refresh` or manual update.
+Feed discoveries back → `/intent-sync` or manual update.
 
 Codebase becomes reinforcement learning environment. Agents improve through better context, not model training.
 
@@ -548,7 +548,7 @@ Capture order (leaf-first, easy-first):
 - New members productive faster
 - Context compounds across all interactions
 
-**Maintenance**: ~5-10 min/PR manual, or automate via `/intent-refresh`
+**Maintenance**: ~5-10 min/PR manual, or automate via `/intent-sync`
 
 ---
 
@@ -562,7 +562,7 @@ Capture order (leaf-first, easy-first):
 ### Phase 2: Commands
 - [ ] `/intent-capture` — single node
 - [ ] `/intent-init` — full bootstrap + hook install
-- [ ] `/intent-refresh` — maintenance
+- [ ] `/intent-sync` — maintenance
 
 ### Phase 3: Polish
 - [ ] Resume support (detect existing nodes, skip completed)
