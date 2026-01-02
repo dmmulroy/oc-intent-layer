@@ -372,9 +372,12 @@ STALE=$(echo -e "$STALE" | sort -u | grep .)
 
 echo "Intent nodes may need refresh:"
 echo -e "$STALE"
-echo "Run: /intent-sync"
-read -p "Push anyway? [y/N] " -r
-[[ $REPLY =~ ^[Yy]$ ]] && exit 0
+read -p "Run /intent-sync? [Y/n] " -r
+[[ $REPLY =~ ^[Nn]$ ]] && exit 1
+
+opencode -p "/intent-sync"
+
+echo "Sync complete. Run 'git push' again."
 exit 1
 
 Make executable: chmod +x .git/hooks/pre-push
