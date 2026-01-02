@@ -77,18 +77,3 @@ Refresh after code changes (or when pre-push hook warns):
 - **LCA placement**: Shared facts go in shallowest ancestor that covers all consumers. Prevents duplication and drift.
 - **Token sweet spot**: 20-64k source tokens compress well. Smaller = poor ratio. Larger = split into children.
 
----
-
-## Open Questions
-
-- ? Best heuristics for identifying semantic boundaries across language ecosystems
-- ? How to handle monorepos with multiple independent projects
-
-## Pending Tasks
-
-- [ ] Implement intent-chunk skill
-- [ ] Implement intent-capture skill
-- [ ] Implement /intent-init command
-- [ ] Implement /intent-capture command
-- [ ] Implement /intent-refresh command
-- [ ] Add resume support for interrupted captures
