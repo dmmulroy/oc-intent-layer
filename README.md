@@ -15,13 +15,13 @@ See [intent-layer-guide.md](./intent-layer-guide.md) for full theory.
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sst/oc-intent-layer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dmmulroy/oc-intent-layer/main/install.sh | bash
 ```
 
 Or clone and run locally:
 
 ```bash
-git clone https://github.com/sst/oc-intent-layer.git
+git clone https://github.com/dmmulroy/oc-intent-layer.git
 cd oc-intent-layer
 ./install.sh
 ```
