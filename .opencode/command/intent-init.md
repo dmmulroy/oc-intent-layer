@@ -54,10 +54,15 @@ Token counting is more accurate with tiktoken. Check availability:
 
 **Check for tiktoken:**
 ```bash
-# Try npx js-tiktoken first (preferred - no install needed)
-if echo "test" | npx js-tiktoken --encoding o200k_base 2>/dev/null; then
-  echo "tiktoken: npx js-tiktoken available"
-  TIKTOKEN_METHOD="npx"
+# Try Node.js tiktoken first (requires npm install -g tiktoken)
+if NODE_PATH=$(npm root -g) node -e "
+const { get_encoding } = require('tiktoken');
+const enc = get_encoding('o200k_base');
+console.log(enc.encode('test').length);
+enc.free();
+" 2>/dev/null; then
+  echo "tiktoken: Node.js tiktoken available"
+  TIKTOKEN_METHOD="node"
 # Try Python tiktoken
 elif python3 -c "import tiktoken; print(len(tiktoken.get_encoding('o200k_base').encode('test')))" 2>/dev/null; then
   echo "tiktoken: Python tiktoken available"
@@ -72,13 +77,12 @@ fi
 ```bash
 if [ "$TIKTOKEN_METHOD" = "estimated" ]; then
   echo ""
-  echo "⚠️  tiktoken not available via npx or python."
+  echo "⚠️  tiktoken not available via Node.js or Python."
   echo "Token counts will use estimation (bytes/4) which has ~20% variance."
   echo ""
-  echo "For more accurate counts, install Python tiktoken:"
-  echo "  pip3 install tiktoken"
-  echo ""
-  echo "Or ensure npx is available (comes with npm/node)."
+  echo "For more accurate counts, install tiktoken:"
+  echo "  npm install -g tiktoken  (preferred)"
+  echo "  pip3 install tiktoken    (alternative)"
   echo ""
 fi
 ```
@@ -89,7 +93,7 @@ Dependencies Ready
 ══════════════════
 Skills:      ✓ intent-chunk, intent-capture
 Commands:    ✓ intent-capture, intent-sync  
-tiktoken:    [✓ available via npx | ✓ available via python | ⚠ using estimation]
+tiktoken:    [✓ available via node | ✓ available via python | ⚠ using estimation]
 
 Proceeding with intent layer bootstrap...
 ```

@@ -15,12 +15,17 @@ Target: $ARGUMENTS (default: project root)
 
 Try each method IN ORDER and use the first that succeeds:
 
-**Step 1 - Try npx js-tiktoken:**
+**Step 1 - Try Node.js tiktoken (requires `npm install -g tiktoken`):**
 ```bash
 # Actually run this command - don't skip it
-echo "test content" | npx js-tiktoken --encoding o200k_base 2>/dev/null
+NODE_PATH=$(npm root -g) node -e "
+const { get_encoding } = require('tiktoken');
+const enc = get_encoding('o200k_base');
+console.log(enc.encode('test').length);
+enc.free();
+" 2>/dev/null
 ```
-If this returns a number, use `TIKTOKEN_METHOD=npx`
+If this prints a number, use `TIKTOKEN_METHOD=node`
 
 **Step 2 - Try Python tiktoken:**
 ```bash
@@ -36,9 +41,9 @@ Only if BOTH above methods failed, use `TIKTOKEN_METHOD=estimated`
 ```
 Token Counting Method
 ═════════════════════
-Tried npx js-tiktoken: [✓ available | ✗ not available]
+Tried Node.js tiktoken: [✓ available | ✗ not available]
 Tried Python tiktoken: [✓ available | ✗ not available]
-Using: [tiktoken via npx | tiktoken via python | estimation (bytes/4)]
+Using: [tiktoken via node | tiktoken via python | estimation (bytes/4)]
 ```
 
 **If using estimation, warn about accuracy:**
@@ -48,13 +53,13 @@ Using: [tiktoken via npx | tiktoken via python | estimation (bytes/4)]
    Node boundary decisions may be suboptimal.
    
    For accurate counts:
-     - Ensure npx is available (comes with npm/node)
+     - Install Node.js tiktoken: npm install -g tiktoken
      - Or install Python tiktoken: pip3 install tiktoken
 ```
 
 Set the method for use in later steps:
 ```
-TIKTOKEN_METHOD: [npx|python|estimated]
+TIKTOKEN_METHOD: [node|python|estimated]
 ```
 
 ### 1. Audit Existing AGENTS.md Files
@@ -182,10 +187,17 @@ Recursively traverse from target, collecting:
 
 **Use the method determined in Step 0. Always indicate which method was used.**
 
-**If TIKTOKEN_METHOD=npx:**
+**If TIKTOKEN_METHOD=node:**
 ```bash
-# Count tokens for a file
-cat <file> | npx js-tiktoken --encoding o200k_base
+# Count tokens for a file using Node.js tiktoken
+NODE_PATH=$(npm root -g) node -e "
+const fs = require('fs');
+const { get_encoding } = require('tiktoken');
+const enc = get_encoding('o200k_base');
+const content = fs.readFileSync('$FILE', 'utf8');
+console.log(enc.encode(content).length);
+enc.free();
+"
 ```
 
 **If TIKTOKEN_METHOD=python:**
@@ -210,7 +222,7 @@ wc -c <file> | awk '{print int($1/4)}'
 
 **Always note which method was used in output:**
 ```
-Token counting: [tiktoken (o200k_base) via npx | tiktoken (o200k_base) via python | estimated (bytes/4)]
+Token counting: [tiktoken (o200k_base) via node | tiktoken (o200k_base) via python | estimated (bytes/4)]
 ```
 
 For each directory, sum tokens of all code files (non-recursive—direct children only for leaf identification).
@@ -383,7 +395,7 @@ Then ask: "Proceed with this capture plan? [y/n/modify]"
 
 ## Notes
 
-- **Always TRY tiktoken first** (npx, then python) before falling back to estimation
+- **Always TRY tiktoken first** (node, then python) before falling back to estimation
 - If using estimation, warn user about potential inaccuracy
 - User can modify order before confirming
 - Intent nodes (proper structure) are skipped—already captured
