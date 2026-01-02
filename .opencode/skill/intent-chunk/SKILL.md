@@ -521,10 +521,14 @@ PARENT NODES ([P] total, summarize children not code):
  ...
 [P]. ./                          5,765k  (root, [N] children)
 
-Merged (below threshold):
-─────────────────────────
-- packages/effect/src/internal/effect/ (8k) → merged into parent
-- packages/vitest/ (10k) → merged into root
+Merged (below threshold, NO AGENTS.md created):
+────────────────────────────────────────────────
+- packages/effect/src/internal/effect/ (8k) → inlined in packages/effect/src/internal/AGENTS.md
+- packages/vitest/ (10k) → inlined in root AGENTS.md
+
+⚠️  IMPORTANT: Merged items must be:
+   1. Summarized inline in their parent's AGENTS.md ("Inlined (Below Threshold)" section)
+   2. NOT listed in the Downlinks table (they have no AGENTS.md to link to)
 
 Legacy content lifting:
 ───────────────────────
@@ -542,6 +546,29 @@ Capture Order (leaf → root):
 ```
 
 Then ask: "Proceed with this capture plan? [y/n/modify]"
+
+### Pass Merge Information to Capture
+
+**Critical:** The capture plan output MUST clearly indicate for each parent node:
+1. Which children get their own AGENTS.md (list as downlinks)
+2. Which children are merged (inline in parent, no downlink)
+
+Store in session state for use during capture:
+```
+MERGE_STATE:
+  ./AGENTS.md (root):
+    downlinks:
+      - ./apps/scm/AGENTS.md
+      - ./packages/editor-common/AGENTS.md
+    inlined:
+      - packages/observability/ (4k)
+      - packages/tools/ (2k)
+  ./apps/scm/AGENTS.md:
+    downlinks:
+      - ./apps/scm/src/services/AGENTS.md
+      - ./apps/scm/src/durable_objects/AGENTS.md
+    inlined: []
+```
 
 ## Notes
 

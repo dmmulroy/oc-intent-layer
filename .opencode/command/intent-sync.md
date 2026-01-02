@@ -4,6 +4,11 @@ description: Sync intent nodes affected by recent code changes
 
 Sync intent nodes affected by recent code changes.
 
+**Key structural rules (enforced during sync):**
+- Downlink URLs MUST end in `AGENTS.md` (e.g., `./child/AGENTS.md`)
+- Only children with actual AGENTS.md files appear in Downlinks table
+- Small items (<10k tokens) merged into parent go in "Inlined (Below Threshold)" section, NOT Downlinks
+
 ## Process
 
 ### 1. Detect Changed Files
@@ -101,7 +106,28 @@ For each affected node (leaf-first order), generate proposed update:
 - Read child AGENTS.md (use proposed updates if child was also affected)
 - Generate proposed parent update incorporating child changes
 - Re-run LCA resolution for any new Open Questions
-- **Validate downlinks**: If a referenced child doesn't exist, flag for removal
+- **Validate downlinks** (critical—see below)
+
+**Downlink validation during sync:**
+```
+For each downlink in parent AGENTS.md:
+  1. URL format: MUST end in "AGENTS.md"
+     ✓ ./services/AGENTS.md
+     ✗ ./services/  ← FIX: append AGENTS.md
+     
+  2. Target exists: Child AGENTS.md must exist
+     ✓ ./packages/editor-common/AGENTS.md (file exists)
+     ✗ ./packages/tools/AGENTS.md (no file) ← REMOVE from downlinks
+     
+  3. Inlined items: Items in "Inlined (Below Threshold)" should NOT be in Downlinks
+     Check for duplicates between sections
+```
+
+**If downlink validation fails:**
+- Auto-fix URL format (append /AGENTS.md)
+- Remove non-existent children from Downlinks
+- If removed child was <10k tokens, consider adding to "Inlined (Below Threshold)" section
+- Flag changes in diff output
 
 Collect all proposed updates before any user interaction.
 
@@ -220,6 +246,12 @@ New Pending Tasks: [P]
 - When analyzing a parent node, validate downlinks exist
 - If child AGENTS.md missing: flag for removal from downlinks
 - Note: "Downlink ./old-child/ no longer exists—removing"
+- If removed child was small (<10k tokens), suggest adding inline summary to "Inlined (Below Threshold)" section
+
+**Malformed downlink URLs:**
+- Downlinks MUST point to `./path/AGENTS.md`, NOT `./path/`
+- Auto-fix during sync if detected
+- Note: "Fixed downlink URL: ./services/ → ./services/AGENTS.md"
 
 **New AGENTS.md added (not by us):**
 - Someone committed an AGENTS.md manually

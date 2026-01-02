@@ -121,7 +121,18 @@ Example: "Owns: payment validation, amount formatting. Does NOT own: persistence
 ❌ [Bad pattern] — [why]
 
 ## Downlinks
-- ./child/AGENTS.md — [brief description]
+<!-- ONLY list children that have their own AGENTS.md file -->
+<!-- URL MUST end in AGENTS.md, NOT the directory -->
+| Child | Description | Tokens |
+|-------|-------------|--------|
+| [child-name/](./child-name/AGENTS.md) | Brief description | ~Xk |
+
+<!-- Alternative list format: -->
+<!-- - [./child-name/AGENTS.md](./child-name/AGENTS.md) — brief description -->
+
+## Inlined (Below Threshold)
+<!-- Small items (<10k tokens) that were merged into this node: -->
+- **small-module/** (~Xk): Brief inline description of what it does
 
 ## Outlinks
 - /docs/adr/NNN-decision.md — [why relevant]
@@ -289,6 +300,38 @@ SHARED STATE:
 │   • Dead code candidate: old_handler.ts
 ```
 
+## Phase 2c: Handle Merged Children (Parent Nodes)
+
+When capturing a parent node, check the capture plan for merged candidates:
+
+**Identify merged items:**
+- Items marked "merge into parent" during chunking
+- Children <10k tokens without package manifest
+- Items in parent's directory but NOT getting their own AGENTS.md
+
+**For each merged item:**
+1. Read its code (it won't have AGENTS.md)
+2. Create brief 1-2 sentence summary
+3. Add to "Inlined (Below Threshold)" section
+4. Do NOT add to Downlinks table
+
+**Example handling:**
+```
+From capture plan:
+  Merged (below threshold):
+  - packages/observability/ (4k) → merge into root
+  - packages/tools/ (2k) → merge into root
+
+In root AGENTS.md:
+  ## Inlined (Below Threshold)
+  - **packages/observability/** (~4k): Metrics, tracing, and analytics utilities for Workers
+  - **packages/tools/** (~2k): Build scripts and deployment tooling
+
+  ## Downlinks
+  <!-- packages/observability/ and packages/tools/ are NOT listed here -->
+  | [packages/editor-common/](./packages/editor-common/AGENTS.md) | Shared editor types | ~25k |
+```
+
 ## Phase 3: Finalize Draft
 
 Apply interview answers (or discovery results) to draft:
@@ -300,7 +343,9 @@ Apply interview answers (or discovery results) to draft:
 - **Be specific:** "Owns X, does NOT own Y" beats "handles X-related things"
 - **Contracts over descriptions:** What MUST hold, not what currently happens
 - **Anti-patterns are critical:** Prevent repeated mistakes
-- **Downlinks only to children:** No lateral deps—ancestors expose via their downlinks
+- **Downlinks only to children WITH AGENTS.md:** No lateral deps—ancestors expose via their downlinks
+- **Downlink URLs MUST end in AGENTS.md:** Always `./child/AGENTS.md`, NEVER `./child/`
+- **Merged items go in "Inlined" section:** Children <10k tokens that were merged should NOT appear in Downlinks table—instead summarize them in "Inlined (Below Threshold)" section
 - **Open Questions are temporary:** They resolve via LCA lifting or future passes
 
 ## Phase 4: LCA Resolution (Parent Nodes Only)
@@ -334,6 +379,31 @@ After resolving questions:
 - Add brief reference if helpful: "See parent for shared-types docs"
 
 ## Phase 5: Confirm & Write
+
+### Validate Generated Content
+
+Before showing to user, validate the draft:
+
+**Downlink validation:**
+```
+For each entry in Downlinks section:
+  1. URL MUST end in "AGENTS.md" (not "/" or directory name)
+     ✓ ./apps/scm/AGENTS.md
+     ✗ ./apps/scm/
+     ✗ ./apps/scm
+  
+  2. Target AGENTS.md MUST exist (or be scheduled for creation)
+     ✓ ./packages/editor-common/AGENTS.md (exists OR in capture plan)
+     ✗ ./packages/observability/AGENTS.md (not in capture plan—was merged!)
+  
+  3. Merged items MUST NOT appear in Downlinks
+     Check against merge_map from capture plan
+```
+
+**If validation fails:**
+- Fix the draft automatically
+- Move merged items from Downlinks to "Inlined (Below Threshold)"
+- Correct URL format (append /AGENTS.md)
 
 ### Show Generated Content
 

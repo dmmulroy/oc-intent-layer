@@ -35,6 +35,8 @@ Only installs `/intent-init` command. Other components install on first run.
 - **Maximum leaf coverage**: No leaf intent node may cover >100k source tokens
 - **Recursive until optimal**: Directories >64k tokens MUST be recursively decomposed until all leaves reach 20k-64k range
 - **Validation required**: Capture plan must pass token compliance checks before presenting to user
+- **Downlink URLs**: MUST always end in `AGENTS.md` (e.g., `./child/AGENTS.md`), NEVER directory path
+- **Downlinks only for nodes with AGENTS.md**: Items merged into parent (<10k tokens) go in "Inlined (Below Threshold)" section, NOT Downlinks table
 
 ## Dependencies
 
@@ -79,6 +81,8 @@ Sync after code changes (or when pre-push hook warns):
 - **Huge root nodes (15k+)** — decompose hierarchically instead
 - **Treating large packages as single nodes** — a 2M token package needs ~40 internal nodes, not 1. Always recurse until reaching 20k-64k range.
 - **Using package count as node count** — 36 packages in a monorepo doesn't mean 36 nodes. Token mass determines node count, not manifest count.
+- **Downlinks to directories instead of AGENTS.md** — Always link to `./child/AGENTS.md`, never `./child/`
+- **Listing merged items as downlinks** — Items merged into parent (<10k tokens) go in "Inlined (Below Threshold)" section, NOT in Downlinks table
 
 ## Downlinks
 

@@ -203,8 +203,16 @@ DISCOVERY_STATE:
 │   └── needs_sme: ["retry policy decision"]
 ├── cross_references:
 │   ├── ./lib/utils/ referenced by: [./services/payment/, ./api/]
+├── merge_map:                    ← FROM CAPTURE PLAN
+│   ├── ./: [packages/observability/, packages/tools/]
+│   └── ./services/: []
 └── total_questions: 5
 ```
+
+**Critical: Merge map from capture plan MUST flow to capture phase.**
+- Items in merge_map get NO AGENTS.md created
+- Parent nodes must inline merged children in "Inlined (Below Threshold)" section
+- Parent downlinks table must ONLY list children with AGENTS.md files
 
 **Discovery pass completion:**
 ```
