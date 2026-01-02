@@ -21,6 +21,45 @@ Read child AGENTS.md files ONLY—this is fractal compression:
 - Note each child's: Purpose, Entry Points, Contracts, Open Questions
 - Collect all child Open Questions for LCA resolution
 
+### Legacy AGENTS.md Handling
+
+If this node was tagged "has legacy content" during chunking:
+
+**Read the legacy AGENTS.md file(s):**
+- Direct legacy: Legacy file at this exact location
+- Inherited legacy: Legacy from child location that lifted here
+
+**Extract valuable content from legacy file:**
+- Warnings/gotchas → candidate for Patterns & Pitfalls
+- Historical context → candidate for Patterns & Pitfalls  
+- Dependency notes → candidate for Dependencies
+- Usage examples → candidate for Usage Patterns
+- API docs → candidate for Entry Points & Contracts
+- Agent instructions → candidate for Patterns & Pitfalls OR flag for `.opencode/` migration
+
+**Note:** Legacy file will be REPLACED, not merged. All valuable content must flow into new intent node structure.
+
+**For root-level legacy with agent instructions:**
+
+Common pattern—existing root AGENTS.md often contains:
+```markdown
+# Project Name
+Instructions for AI agents working in this codebase...
+
+## Rules
+- Always use yarn, not npm
+- Run tests before committing
+...
+```
+
+Separate concerns:
+- **Architectural content** → new intent node's Purpose & Scope, Patterns & Pitfalls
+- **Agent behavior rules** → flag for user decision:
+  - Keep in Patterns & Pitfalls section
+  - OR migrate to `.opencode/agent.md` (cleaner separation)
+
+Present migration options during interview if detected.
+
 ## Phase 2: Interview
 
 ### Agent Describes First
@@ -38,6 +77,41 @@ OBSERVATIONS:
 • I'm uncertain about [E]—it could be [F] or [G]
 
 Does this match your understanding?
+```
+
+### If Legacy Content Exists
+
+When this node has legacy AGENTS.md content, ALSO share:
+
+```
+LEGACY CONTENT FOUND:
+I found an existing AGENTS.md at this location. Here's what it contains:
+
+From [path]/AGENTS.md:
+• [Summary of existing content]
+• Key points: [X, Y, Z]
+• Warnings mentioned: [A, B]
+
+Questions about legacy content:
+• "The existing docs say [X]—is this still accurate?"
+• "There's a warning about [Y]. Should this be preserved?"
+• "I see instructions to [Z]. Is this still relevant?"
+• "The legacy file mentions [W] but I don't see it in code—deprecated?"
+```
+
+For root-level agent instructions specifically:
+```
+AGENT INSTRUCTIONS DETECTED:
+The existing root AGENTS.md contains agent behavior rules:
+• [Rule 1]
+• [Rule 2]
+
+Options:
+1. Preserve in new intent node's Patterns & Pitfalls section
+2. Migrate to .opencode/agent.md (cleaner separation)
+3. Discard (no longer needed)
+
+Which approach do you prefer?
 ```
 
 ### Then Ask Targeted Questions
@@ -221,3 +295,6 @@ Write to `[target]/AGENTS.md`
 - User "skip" or "later" on questions is valid—add to Open Questions
 - Refactors go to Pending Tasks, not immediate action
 - For monorepos, respect project boundaries
+- **Legacy handling**: Always extract valuable content from existing AGENTS.md before replacing
+- **Agent instructions**: If legacy root has agent rules, present migration options (keep vs move to .opencode/)
+- **Inherited legacy**: When legacy content lifts from child location, acknowledge source in interview

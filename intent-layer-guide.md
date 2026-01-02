@@ -283,7 +283,7 @@ Place Intent Nodes where responsibilities shift, contracts matter, or complexity
 
 ### Chunking Strategy
 
-**Target:** 20k-64k tokens per semantic unit (best compression ratio).
+**Target:** 20k-64k *source* tokens per semantic unit (best compression ratio). These compress to ~1-3k token intent nodes.
 
 **Similar code compresses better:**
 
@@ -307,7 +307,7 @@ high compression                   poor compression
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  1. CHUNK CODEBASE                                          │
-│     Divide into 20k-64k token semantic units                │
+│     Divide into 20k-64k source token semantic units         │
 │     Group by shared responsibility, patterns, vocabulary    │
 └─────────────────────┬───────────────────────────────────────┘
                       ▼
@@ -614,5 +614,5 @@ MANUAL                              AUTOMATED
 | [Fractal compression](#fractal-compression) | Each layer compresses already-compressed layer below |
 | [LCA](#least-common-ancestor-lca-pattern) | Place shared facts at shallowest common ancestor |
 | Semantic boundary | Where responsibilities shift, contracts matter, complexity warrants context |
-| Optimal chunk | 20k-64k tokens per node |
+| Optimal chunk | 20k-64k *source* tokens per node (compresses to ~1-3k output) |
 | Coverage | A node covers its directory and all subdirectories |

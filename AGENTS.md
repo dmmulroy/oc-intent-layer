@@ -65,7 +65,6 @@ Sync after code changes (or when pre-push hook warns):
 
 ## Outlinks
 
-- PLAN.md — full implementation plan with phases
 - opencode-guide.md — OpenCode primitives reference
 - intent-layer-guide.md — Intent layer theory reference
 - https://www.intent-systems.com/learn/intent-layer — canonical source
@@ -76,4 +75,5 @@ Sync after code changes (or when pre-push hook warns):
 - **Easy areas first**: Capture simple modules before complex ones. Context compounds.
 - **LCA placement**: Shared facts go in shallowest ancestor that covers all consumers. Prevents duplication and drift.
 - **Token sweet spot**: 20-64k source tokens compress well. Smaller = poor ratio. Larger = split into children.
+- **Legacy AGENTS.md handling**: Audit existing files before capture. Classify as intent nodes (skip) vs legacy (extract & replace). Never silently skip—legacy files often contain valuable tribal knowledge.
 

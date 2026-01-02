@@ -10,7 +10,32 @@ Bootstrap complete intent layer for this project.
 
 Run @intent-chunk to analyze codebase and generate capture plan.
 
+This includes:
+- **Audit existing AGENTS.md files**: Classify as intent nodes (skip) or legacy (extract & replace)
+- **Token analysis**: Calculate code mass per directory
+- **Boundary detection**: Identify semantic boundaries for intent nodes
+- **Legacy mapping**: Map legacy content to target nodes
+- **Capture ordering**: Leaf-first, easy-first sequence
+
 Present the plan and ask user to confirm before proceeding.
+
+**If legacy files found:**
+```
+Found [N] legacy AGENTS.md files that will be processed:
+
+  ./AGENTS.md (project instructions)
+    → Will extract: build instructions, project overview
+    → Will replace with: root intent node
+    
+  ./api/AGENTS.md (hand-written docs)
+    → Will extract: endpoint docs, auth notes
+    → Will replace with: ./api/ intent node
+
+Legacy content will be reviewed during each node's capture interview.
+Valuable content will be incorporated into new intent nodes.
+
+Proceed? [y/n]
+```
 
 ### 2. Capture All Nodes
 
@@ -20,12 +45,18 @@ For each node in the confirmed leaf-first order:
 [X/N] Capturing /path/to/directory/
 ```
 
+If node has legacy content:
+```
+[X/N] Capturing /path/to/directory/ ◀ has legacy AGENTS.md
+```
+
 Run @intent-capture for each node.
 
 Track progress:
 - Completed nodes
 - Open questions accumulated
 - Pending tasks discovered
+- Legacy files processed
 - Time elapsed
 
 If user needs to pause, save state for resume (note completed nodes).
@@ -82,6 +113,9 @@ Intent Layer Bootstrap Complete
 Nodes created: [N]
 Total tokens: ~[X]k across all nodes
 
+Legacy files processed: [L]
+  [list paths replaced]
+
 Open Questions remaining: [M]
   [list top 3-5 if any]
 
@@ -99,9 +133,49 @@ Next steps:
 
 ## Resume Support
 
-If interrupted, check for existing AGENTS.md files:
-- Skip directories that already have AGENTS.md
-- Note: "Resuming—[N] nodes already captured"
-- Continue with remaining nodes in order
+State persistence is implicit—AGENTS.md files themselves ARE the state:
 
-User can force re-capture with explicit path via /intent-capture.
+**On resume (re-running `/intent-init` after interruption):**
+
+1. Re-run `@intent-chunk` to get full capture plan
+2. For each node in the plan, check if AGENTS.md exists:
+   - **Has intent node structure** → Skip (already captured)
+   - **Has legacy structure** → Process as planned (extract & replace)
+   - **No AGENTS.md** → Capture normally
+3. Report: "Resuming—[N] nodes already captured, [M] remaining"
+4. Continue with remaining nodes in leaf-first order
+
+**Why this works:**
+- Completed captures write AGENTS.md immediately
+- The classification algorithm distinguishes our nodes from legacy
+- No separate state file needed—the filesystem is the checkpoint
+
+**To force re-capture** of a completed node:
+```
+/intent-capture ./path/to/directory/
+```
+This will show the existing node and ask to overwrite.
+
+## Legacy File Handling
+
+When existing AGENTS.md files are found that don't match intent node structure:
+
+1. **Audit phase** classifies each as intent node vs legacy
+2. **Legacy content extracted** and stored for capture phase
+3. **During capture**, legacy content is:
+   - Presented in interview
+   - Validated with user ("Is this still accurate?")
+   - Incorporated into new intent node where relevant
+4. **Legacy file replaced** with new intent node
+
+**Root AGENTS.md with agent instructions:**
+- Common pattern: existing root has project-level agent rules
+- Migration options presented during root capture:
+  - Keep in Patterns & Pitfalls section
+  - Move to `.opencode/agent.md`
+  - Discard if obsolete
+
+**Boundary misalignment:**
+- Legacy file at location that isn't a semantic boundary
+- Content lifts to nearest ancestor that IS a boundary
+- User notified during audit phase
