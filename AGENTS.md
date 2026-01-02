@@ -26,7 +26,7 @@ Only installs `/intent-init` command. Other components install on first run.
 - `@intent-capture` — Generate AGENTS.md - supports discovery mode (agentic) and interactive mode (SME interview)
 
 **Invariants**:
-- Token counting MUST TRY tiktoken first (npx, then python) before estimation fallback
+- Token counting MUST TRY tiktoken first (node, then python) before estimation fallback
 - Capture order is always leaf-first (children before parents)
 - Parent nodes read child AGENTS.md, never child code (fractal compression)
 - Open Questions resolve via LCA lifting during parent capture
@@ -37,8 +37,8 @@ Only installs `/intent-init` command. Other components install on first run.
 
 - OpenCode CLI with skill/command support
 - Git (for pre-push hook, change detection)
-- **tiktoken** (required for token counting):
-  - npx: `npx js-tiktoken` (preferred - no install needed, comes with npm/node)
+- **tiktoken** (required for accurate token counting):
+  - Node.js: `npm install -g tiktoken` (preferred)
   - Python: `pip3 install tiktoken` (fallback)
 - Target codebase must be a git repository
 
@@ -81,7 +81,7 @@ Sync after code changes (or when pre-push hook warns):
 - .opencode/skill/intent-capture/SKILL.md — discovery mode + interview + generation
 - .opencode/command/intent-init.md — bootstrap orchestration, two-pass architecture
 - .opencode/command/intent-capture.md — single node command wrapper
-- .opencode/command/intent-sync.md — maintenance command
+- .opencode/command/intent-sync.md — sync nodes after code changes, leaf-first diff analysis
 
 ## Outlinks
 
@@ -92,7 +92,7 @@ Sync after code changes (or when pre-push hook warns):
 ## Patterns & Pitfalls
 
 - **Two-pass architecture**: Discovery pass generates all drafts without user interaction, then consolidated interview asks only genuinely unclear questions. Reduces interruptions and improves question quality.
-- **Try tiktoken first**: The agent MUST actually attempt npx js-tiktoken and python tiktoken before falling back to bytes/4 estimation. Estimation has 20%+ error which can cause wrong node boundary decisions.
+- **Try tiktoken first**: The agent MUST actually attempt Node.js tiktoken and python tiktoken before falling back to bytes/4 estimation. Estimation has 20%+ error which can cause wrong node boundary decisions.
 - **Node count heuristics**: 
   - <20k tokens: 1 node (root only)
   - 20k-64k: 1-2 nodes
@@ -103,3 +103,4 @@ Sync after code changes (or when pre-push hook warns):
 - **LCA placement**: Shared facts go in shallowest ancestor that covers all consumers. Prevents duplication and drift.
 - **Legacy AGENTS.md handling**: Audit existing files before capture. Classify as intent nodes (skip) vs legacy (extract & replace). Never silently skip—legacy files often contain valuable tribal knowledge.
 - **Lazy installation**: Only /intent-init is installed initially. Skills and other commands install on first run. This keeps initial setup fast.
+- **Root Open Questions**: If questions remain unresolved at root, they represent true unknowns in the codebase. Document as-is or create follow-up tasks to investigate with domain experts.

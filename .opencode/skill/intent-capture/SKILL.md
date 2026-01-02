@@ -111,7 +111,8 @@ Example: "Owns: payment validation, amount formatting. Does NOT own: persistence
 - Invariants: [constraints callers must respect]
 
 ## Dependencies
-- [External system, library, env var requirement]
+- [External systems, required env vars, runtime requirements]
+- Note: Focus on what code CANNOT express—external APIs, infrastructure deps, env config
 
 ## Usage Patterns
 [Canonical correct usage example—code snippet if helpful]
