@@ -4,7 +4,7 @@ set -e
 # Intent Layer Tools Installer for OpenCode
 # Installs skills and commands globally to ~/.config/opencode/
 
-REPO_URL="https://github.com/sst/oc-intent-layer"
+REPO_URL="https://github.com/dmmulroy/oc-intent-layer"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 INSTALL_DIR="$CONFIG_DIR/oc-intent-layer"
 
