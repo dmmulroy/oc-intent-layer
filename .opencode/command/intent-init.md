@@ -360,34 +360,91 @@ Make executable: `chmod +x .git/hooks/pre-push`
 
 ## Phase 6: Final Summary
 
+Calculate and display context compaction savings:
+
+**Calculate metrics:**
+- **Source tokens**: Sum of all raw code tokens analyzed during chunking
+- **Intent layer tokens**: Sum of all generated AGENTS.md token counts  
+- **Compression ratio**: Source tokens ÷ Intent layer tokens
+- **Exploration savings**: Estimated tokens saved per task vs "dark room navigation"
+
+**Compression ratio interpretation:**
+- 50:1 - 100:1 = Typical for well-structured codebases
+- 100:1 - 400:1 = Excellent compression (cohesive code, clear boundaries)
+- < 50:1 = May indicate too many small nodes or verbose node content
+
+**Exploration savings calculation:**
+Without intent layer, agents typically consume ~40k+ tokens per task exploring:
+- Query tokens: ~500
+- Exploration overhead (ls, grep): ~15k
+- Relevant code found: ~10k  
+- Dead ends & noise: ~15k+
+
+With intent layer, agents consume:
+- Intent layer context (T-shaped): ~[intent tokens for deepest path]k
+- Relevant code (targeted): ~10-16k
+
 ```
 Intent Layer Bootstrap Complete
 ═══════════════════════════════
 
-Nodes created: [N]
-Total tokens: ~[X]k across all nodes
-Token counting: [tiktoken method used]
+CONTEXT COMPACTION
+──────────────────
+Source code analyzed:     ~[X]k tokens
+Intent layer generated:   ~[Y]k tokens ([N] nodes)
+Compression ratio:        [X/Y]:1
 
-Legacy files processed: [L]
+Per-task savings (estimated):
+  Without intent layer:   ~40k+ tokens (exploration overhead)
+  With intent layer:      ~[Z]k tokens (targeted context)
+  Savings per task:       ~[40-Z]k tokens ([percentage]%)
+
+LCA efficiency:
+  Facts deduplicated:     [D] (placed at common ancestors)
+  Redundancy eliminated:  ~[R]k tokens
+
+Token counting method:    [tiktoken via node | tiktoken via python | bytes/4 estimation]
+
+NODES CREATED
+─────────────
+[N] nodes across [L] hierarchy levels
+
+[Tree visualization showing node structure with token counts]
+Root (~Xk)
+├── /services/ (~Yk)
+│   ├── /payment/ (~Zk)
+│   └── /billing/ (~Wk)
+└── /lib/ (~Vk)
+
+LEGACY MIGRATION
+────────────────
+Files processed: [L]
   [list paths replaced]
 
-Open Questions remaining: [M]
+OPEN ITEMS
+──────────
+Questions remaining: [M]
   [list top 3-5 if any]
 
-Pending Tasks discovered: [P]
+Tasks discovered: [P]
   [list top 3-5 if any]
 
+INSTALLATION
+────────────
 Pre-push hook: ✓ installed
 
 Commands now available:
   /intent-capture [path]  Capture/update single node
   /intent-sync            Sync nodes after code changes
 
-Next steps:
+NEXT STEPS
+──────────
 • Review generated AGENTS.md files
 • Resolve remaining Open Questions via /intent-capture on parent nodes
 • Address Pending Tasks as technical debt
 • Hook will warn when pushing changes without AGENTS.md updates
+
+Your agents now start every task with [compression ratio]:1 more efficient context.
 ```
 
 ## Resume Support
