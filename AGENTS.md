@@ -32,6 +32,9 @@ Only installs `/intent-init` command. Other components install on first run.
 - Open Questions resolve via LCA lifting during parent capture
 - Generated nodes target 1-3k tokens from 20-64k source
 - Node count based on actual token counts, not arbitrary boundaries
+- **Maximum leaf coverage**: No leaf intent node may cover >100k source tokens
+- **Recursive until optimal**: Directories >64k tokens MUST be recursively decomposed until all leaves reach 20k-64k range
+- **Validation required**: Capture plan must pass token compliance checks before presenting to user
 
 ## Dependencies
 
@@ -74,6 +77,8 @@ Sync after code changes (or when pre-push hook warns):
 - **Skipping interview for complex areas** — misses tribal knowledge
 - **Documenting lateral deps in nodes** — ancestors expose via downlinks
 - **Huge root nodes (15k+)** — decompose hierarchically instead
+- **Treating large packages as single nodes** — a 2M token package needs ~40 internal nodes, not 1. Always recurse until reaching 20k-64k range.
+- **Using package count as node count** — 36 packages in a monorepo doesn't mean 36 nodes. Token mass determines node count, not manifest count.
 
 ## Downlinks
 
@@ -93,10 +98,14 @@ Sync after code changes (or when pre-push hook warns):
 
 - **Two-pass architecture**: Discovery pass generates all drafts without user interaction, then consolidated interview asks only genuinely unclear questions. Reduces interruptions and improves question quality.
 - **Try tiktoken first**: The agent MUST actually attempt Node.js tiktoken and python tiktoken before falling back to bytes/4 estimation. Estimation has 20%+ error which can cause wrong node boundary decisions.
-- **Node count heuristics**: 
+- **Node count heuristics** (sanity check: `expected_leaves ≈ total_tokens / 50k`):
   - <20k tokens: 1 node (root only)
   - 20k-64k: 1-2 nodes
-  - 64k-150k: 2-4 nodes
+  - 64k-200k: 2-4 leaves
+  - 200k-500k: 4-10 leaves
+  - 500k-2M: 10-40 leaves
+  - 2M-10M: 40-200 leaves
+  - >10M: 200+ leaves
   - Merge candidates <10k tokens into parent
 - **Interview first, generate second**: Agent describes observations, SME corrects. Correcting is faster than explaining from scratch.
 - **Easy areas first**: Capture simple modules before complex ones. Context compounds.

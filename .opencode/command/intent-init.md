@@ -111,25 +111,38 @@ Run @intent-chunk to analyze codebase and generate capture plan.
 This includes:
 - **Audit existing AGENTS.md files**: Classify as intent nodes (skip) or legacy (extract & replace)
 - **Token analysis**: Calculate ACTUAL code mass per directory using tiktoken
+- **Recursive decomposition**: Directories >64k tokens MUST be broken down until reaching 20k-64k leaf nodes
 - **Boundary detection**: Identify semantic boundaries for intent nodes
 - **Node count optimization**: Apply heuristics based on real token counts
+- **Validation**: Ensure no leaf >100k tokens, leaf count matches expected ratio
 - **Legacy mapping**: Map legacy content to target nodes
 - **Capture ordering**: Leaf-first, easy-first sequence
 
 **Node count heuristics (based on ACTUAL token counts):**
 
-| Total Repo Tokens | Recommended Nodes | Reasoning |
-|-------------------|-------------------|-----------|
-| < 20k | 1 (root only) | Below compression threshold |
-| 20k-64k | 1-2 | Single node ideal, maybe split if clear boundary |
-| 64k-150k | 2-4 | Split at major semantic boundaries |
-| 150k-500k | 4-8 | Hierarchical decomposition |
-| > 500k | 8+ | Full tree structure |
+**Sanity check formula:** `expected_leaves ≈ total_tokens / 50k`
 
-**Per-node thresholds:**
-- < 10k tokens: Consider merging with parent (unless package manifest)
-- 20k-64k tokens: Ideal single node
-- > 100k tokens: Should have children
+| Total Repo Tokens | Expected Leaves | Expected Total | Strategy |
+|-------------------|-----------------|----------------|----------|
+| <20k | 1 | 1 | Root only |
+| 20k-64k | 1 | 1-2 | Single node ideal |
+| 64k-200k | 2-4 | 3-6 | Root + leaves |
+| 200k-500k | 4-10 | 8-15 | 2-level tree |
+| 500k-2M | 10-40 | 20-60 | 3-level tree |
+| 2M-10M | 40-200 | 60-300 | Deep hierarchy |
+| >10M | 200+ | 300+ | Large monorepo |
+
+**Per-node thresholds (HARD CONSTRAINTS):**
+- <10k tokens: Merge with parent (unless package manifest)
+- 20k-64k tokens: Ideal leaf node range
+- >64k tokens: MUST recurse into subdirectories
+- >100k tokens: MUST have child nodes (no exceptions)
+
+**Validation requirement:**
+The capture plan MUST pass validation before presenting to user:
+- No leaf node >100k tokens
+- Leaf count within 0.5x-2x of `total_tokens / 50k`
+- All nodes >64k have children listed
 
 Present the plan and ask user to confirm before proceeding.
 

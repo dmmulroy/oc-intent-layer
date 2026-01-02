@@ -235,6 +235,9 @@ A directory becomes an intent node candidate when ANY of:
 - `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`
 - `setup.py`, `pom.xml`, `build.gradle`
 
+**IMPORTANT: Package manifest indicates semantic boundary, NOT "single node".**
+A package with 2M tokens still needs ~40 internal child nodes. The manifest location becomes a PARENT node if children exist.
+
 **Domain directory name:**
 - `services/`, `api/`, `domain/`, `lib/`, `pkg/`
 - `handlers/`, `controllers/`, `models/`, `utils/`
@@ -243,28 +246,90 @@ A directory becomes an intent node candidate when ANY of:
 **Significant code mass:**
 - 20k-64k tokens ideal (best compression ratio)
 - <10k tokens: **MERGE with parent** (unless package manifest)
-- >100k tokens: likely needs child nodes
+- >64k tokens: **MUST recurse into subdirectories**
+- >100k tokens: **MUST have child nodes** (hard constraint)
 
 **Responsibility shift indicators:**
 - README or docs in directory
 - Distinct naming conventions
 - Clear module boundary
 
-### 5. Apply Node Count Heuristics
+### 5. Apply Recursive Decomposition (MANDATORY)
 
-**Based on TOTAL repository token count, recommend node structure:**
+**This algorithm is NOT optional. Apply it to EVERY directory >64k tokens.**
 
-| Total Tokens | Recommended Nodes | Strategy |
-|--------------|-------------------|----------|
-| < 20k | 1 | Root only—below compression threshold |
-| 20k-64k | 1-2 | Single root, or root + 1 major module |
-| 64k-150k | 2-4 | Root + major semantic boundaries |
-| 150k-500k | 4-8 | Hierarchical decomposition |
-| > 500k | 8+ | Full tree, possibly monorepo treatment |
+```
+analyze(dir):
+  tokens = count_tokens(dir)  # recursive total
+  
+  if tokens < 10k AND no_package_manifest(dir):
+    return MERGE_INTO_PARENT
+  
+  if tokens <= 64k:
+    return LEAF_NODE(dir)
+  
+  # tokens > 64k: MUST decompose further
+  children = []
+  for subdir in get_subdirectories(dir):
+    result = analyze(subdir)
+    if result != MERGE_INTO_PARENT:
+      children.append(result)
+  
+  # If no valid children found but dir is >64k,
+  # it becomes a leaf anyway (code is flat)
+  if len(children) == 0:
+    return LEAF_NODE(dir)  # flag as oversized if >100k
+  
+  # This directory becomes a PARENT node
+  return PARENT_NODE(dir, children)
+```
 
-**Apply merge rule aggressively:**
-- If a candidate node has < 10k tokens AND no package manifest → merge into parent
-- If merging would create a node > 64k tokens → keep separate
+**Hard constraints:**
+- NO leaf node may cover >100k source tokens
+- Directories >64k tokens MUST recurse (not optional)
+- Keep recursing until ALL leaves are in 10k-64k range (or smallest possible)
+
+**Example recursive decomposition:**
+```
+packages/effect/ (2,538k tokens)
+├── src/ (997k) → too big, recurse
+│   ├── internal/ (454k) → too big, recurse
+│   │   ├── stm/ (67k) → LEAF NODE ✓
+│   │   ├── channel/ (20k) → LEAF NODE ✓
+│   │   ├── metric/ (13k) → LEAF NODE ✓
+│   │   ├── effect/ (8k) → merge candidate
+│   │   └── ...
+│   └── [other src subdirs...]
+├── test/ (349k) → too big, recurse
+│   ├── Schema/ (91k) → too big, recurse further
+│   ├── Stream/ (73k) → LEAF NODE ✓
+│   └── Effect/ (66k) → LEAF NODE ✓
+└── dtslint/ (78k) → LEAF NODE ✓
+
+Result: ~50 leaf nodes, not 1
+```
+
+### 6. Apply Node Count Heuristics
+
+**Expected node counts based on ~50k tokens per leaf (middle of optimal range):**
+
+| Total Tokens | Expected Leaves | Expected Total | Notes |
+|--------------|-----------------|----------------|-------|
+| <20k | 1 | 1 | Root only |
+| 20k-64k | 1 | 1 | Single optimal node |
+| 64k-200k | 2-4 | 3-6 | Root + leaves |
+| 200k-500k | 4-10 | 8-15 | 2-level tree |
+| 500k-2M | 10-40 | 20-60 | 3-level tree |
+| 2M-10M | 40-200 | 60-300 | Deep hierarchy |
+| >10M | 200+ | 300+ | Large monorepo |
+
+**Sanity check formula:** `expected_leaves ≈ total_tokens / 50k`
+
+If your plan has significantly fewer nodes than this formula suggests, you have NOT recursed deeply enough.
+
+**Apply merge rule for small directories:**
+- If a candidate node has <10k tokens AND no package manifest → merge into parent
+- If merging would create a node >64k tokens → keep separate
 - If clear semantic boundary (different language, different responsibility) → keep separate
 
 **Example heuristic application:**
@@ -283,7 +348,55 @@ After merge:
 Recommendation: 1 node (root only)
 ```
 
-### 6. Determine Capture Order
+### 7. Validate Capture Plan (REQUIRED)
+
+**Before presenting the plan to the user, verify ALL of these constraints:**
+
+```
+VALIDATION CHECKLIST:
+═════════════════════
+
+1. No oversized leaves
+   [ ] Every leaf node ≤ 100k tokens
+   → If ANY leaf >100k: FAIL - must recurse further
+
+2. Node count sanity
+   [ ] actual_leaves within 0.5x-2x of (total_tokens / 50k)
+   → If ratio <0.5x: WARNING - probably need more decomposition
+   → If ratio >2x: WARNING - may have too many small nodes
+
+3. Parents have children
+   [ ] Every node >64k tokens has child nodes listed
+   → If >64k with no children: FAIL - missing decomposition
+
+4. Coverage complete
+   [ ] Sum of leaf coverage ≈ total repo tokens
+```
+
+**Example validation:**
+```
+VALIDATION
+──────────
+Total source tokens:  5,765k
+Expected leaves:      ~115 (5765k / 50k)
+Actual leaves:        14
+Ratio:                0.12x ← FAIL (need ~8x more decomposition)
+
+Oversized leaves:     2
+  packages/effect/    2,538k ← FAIL (>100k, needs children)
+  packages/platform/  2,128k ← FAIL (>100k, needs children)
+
+⛔ VALIDATION FAILED - Re-run with deeper recursion
+```
+
+**If validation fails:**
+1. Re-analyze directories that are too large
+2. Apply recursive decomposition more deeply
+3. Re-validate until all constraints pass
+
+**Only present plan to user AFTER validation passes.**
+
+### 8. Determine Capture Order
 
 **Principle:** Leaf-first, easy-first.
 
@@ -303,7 +416,7 @@ Recommendation: 1 node (root only)
 - Context compounds—simple areas illuminate complex ones
 - Open questions resolve during parent capture
 
-### 7. Map Legacy Content to Nodes
+### 9. Map Legacy Content to Nodes
 
 For each legacy file from audit:
 
@@ -324,9 +437,31 @@ Nearest boundary: ./utils/ (25k tokens, IS a boundary)
 → ./utils/ tagged with legacy content from ./utils/helpers/
 ```
 
-### 8. Handle Edge Cases
+### 10. Handle Edge Cases
 
-**Monorepo:** Each independent project gets separate capture pass. Identify by:
+**Monorepo:** Large monorepos require careful recursive analysis:
+
+**Don't treat package count as node count:**
+- 36 packages in a monorepo does NOT mean 36 nodes
+- A 2.5M token package may need 50+ internal nodes
+- Token mass determines node count, not manifest count
+
+**Analyze each package independently:**
+```
+for each package:
+  tokens = count_tokens(package)
+  if tokens > 64k:
+    recursively_decompose(package)  # creates child nodes
+  else:
+    single_node(package)
+```
+
+**Expected outcomes:**
+- 1M token monorepo → 20-40 leaf nodes
+- 5M token monorepo → 100-200 leaf nodes
+- Root summarizes package-level parents (not all leaves)
+
+**Identification:**
 - Multiple package manifests at same depth
 - Independent CI configs
 - No code imports between areas
@@ -343,6 +478,8 @@ Common case—OpenCode users often have root AGENTS.md with project-level instru
 
 ## Output Format
 
+**Only present this AFTER validation passes (see Step 7).**
+
 Present to user:
 
 ```
@@ -351,8 +488,15 @@ Intent Layer Capture Plan
 
 Target: [path]
 Token counting: tiktoken (o200k_base) via [method]
-Total code tokens: [N]k [tiktoken]
-Proposed nodes: [M]
+Total code tokens: [N]k
+
+VALIDATION PASSED ✓
+───────────────────
+Expected leaves:    ~[N/50]
+Actual leaves:      [L]
+Ratio:              [L/(N/50)]x ✓
+Oversized leaves:   0 ✓
+Coverage:           100% ✓
 
 Existing AGENTS.md:
 ───────────────────
@@ -360,34 +504,40 @@ Intent nodes (skip): [X]
   ./services/payment/AGENTS.md
 Legacy files (replace): [Y]
   ./AGENTS.md → extract & replace
-  ./api/AGENTS.md → extract & replace
 
-Directory Tree (with token counts):
-───────────────────────────────────
-[tree view with token counts, marking nodes with legacy content]
+LEAF NODES ([L] total):
+───────────────────────
+ 1. packages/effect/src/internal/stm/      67k  ✓ optimal
+ 2. packages/effect/src/internal/channel/  20k  ✓ optimal
+ 3. packages/effect/test/Stream/           73k  ⚠ slightly over (ok)
+ ...
+[L]. packages/typeclass/src/               45k  ✓ optimal
 
-Node Count Recommendation:
-──────────────────────────
-Total tokens: [N]k → [M] nodes recommended
-Merged candidates: [list any directories merged due to size]
+PARENT NODES ([P] total, summarize children not code):
+──────────────────────────────────────────────────────
+ 1. packages/effect/src/internal/  454k  (8 children)
+ 2. packages/effect/src/           997k  (3 children)
+ 3. packages/effect/             2,538k  (4 children)
+ ...
+[P]. ./                          5,765k  (root, [N] children)
 
-Capture Order (leaf → root):
-────────────────────────────
-1. /path/to/module/          (~Xk tokens) [tiktoken] - [reason]
-2. /api/                     (~Yk tokens) [tiktoken] - [reason] ◀ has legacy
-...
-N. /                         (summarizes children) ◀ has legacy
-
-Skipped (below threshold):
-──────────────────────────
-- /path/tiny/  (800 tokens, merged into parent)
+Merged (below threshold):
+─────────────────────────
+- packages/effect/src/internal/effect/ (8k) → merged into parent
+- packages/vitest/ (10k) → merged into root
 
 Legacy content lifting:
 ───────────────────────
 - ./utils/helpers/AGENTS.md → lifts to ./utils/
 
-⚠️  Potential issues:
-- [any warnings about large directories, unclear boundaries]
+Capture Order (leaf → root):
+────────────────────────────
+[Leaves first, sorted by complexity (simpler first)]
+[Then parents, bottom-up]
+[Root last]
+
+⚠️  Notes:
+- [any warnings about slightly oversized nodes]
 - [legacy files at unexpected locations]
 ```
 
@@ -401,4 +551,6 @@ Then ask: "Proceed with this capture plan? [y/n/modify]"
 - Intent nodes (proper structure) are skipped—already captured
 - Legacy AGENTS.md are extracted and replaced with new intent nodes
 - This skill only plans—actual capture uses @intent-capture
-- Node count heuristics prevent creating too many small nodes
+- **Validation is mandatory** — never present a plan that fails token constraints
+- **Recursive decomposition is mandatory** — directories >64k MUST be analyzed further
+- **Sanity check**: If your leaf count is <50% of `total_tokens / 50k`, you haven't recursed enough
