@@ -32,9 +32,10 @@ Only installs `/intent-init` command. Other components install on first run.
 - Open Questions resolve via LCA lifting during parent capture
 - Generated nodes target 1-3k tokens from 20-64k source
 - Node count based on actual token counts, not arbitrary boundaries
-- **Maximum leaf coverage**: No leaf intent node may cover >100k source tokens
-- **Recursive until optimal**: Directories >64k tokens MUST be recursively decomposed until all leaves reach 20k-64k range
-- **Validation required**: Capture plan must pass token compliance checks before presenting to user
+- **Maximum leaf coverage**: No leaf intent node may cover >100k source tokens — **HARD CONSTRAINT, validation fails otherwise**
+- **Recursive until optimal**: Directories >64k tokens MUST be recursively decomposed until all leaves reach 20k-64k range — **package.json does NOT exempt a directory from recursion**
+- **Validation is a HARD GATE**: Capture plan must pass ALL token compliance checks before presenting to user. If validation fails, re-run decomposition—do NOT present failing plan.
+- **Leaf count sanity**: `expected_leaves ≈ total_tokens / 50k`. If actual < expected * 0.5, decomposition is incomplete.
 - **Downlink URLs**: MUST always end in `AGENTS.md` (e.g., `./child/AGENTS.md`), NEVER directory path
 - **Downlinks only for nodes with AGENTS.md**: Items merged into parent (<10k tokens) go in "Inlined (Below Threshold)" section, NOT Downlinks table
 
@@ -83,6 +84,9 @@ Sync after code changes (or when pre-push hook warns):
 - **Using package count as node count** — 36 packages in a monorepo doesn't mean 36 nodes. Token mass determines node count, not manifest count.
 - **Downlinks to directories instead of AGENTS.md** — Always link to `./child/AGENTS.md`, never `./child/`
 - **Listing merged items as downlinks** — Items merged into parent (<10k tokens) go in "Inlined (Below Threshold)" section, NOT in Downlinks table
+- **Stopping at package boundaries** — "It has package.json" does NOT mean "one node". A 1.4M token package MUST have ~28 internal nodes.
+- **Presenting failing validation** — If leaves >100k or ratio <0.5x, re-run decomposition. Do NOT show user a failing plan.
+- **Conflating compression ratio with quality** — 280:1 compression from skipping recursion is WRONG. Proper 115:1 from deep hierarchy is correct.
 
 ## Downlinks
 

@@ -258,3 +258,38 @@ New Pending Tasks: [P]
 - Classify: intent node structure or legacy?
 - If legacy: offer migration during sync
 - If valid structure but not in parent's downlinks: suggest adding downlink
+
+**Oversized leaf node discovered during sync:**
+- During analysis, calculate token count of affected leaf nodes
+- If ANY leaf covers >100k tokens, flag as structural issue:
+  ```
+  ⚠️ STRUCTURAL ISSUE: Oversized leaf node detected
+  
+  ./packages/effect/AGENTS.md covers 1,412k source tokens
+  Maximum allowed for leaf node: 100k tokens
+  
+  This node should be decomposed into ~28 child nodes.
+  
+  Options:
+  1. Re-run /intent-init to restructure hierarchy
+  2. Manually create child nodes and convert this to parent
+  
+  Cannot sync this node until structure is corrected.
+  ```
+- Skip sync for oversized nodes—structure must be fixed first
+- Continue with other nodes that are correctly sized
+
+**Node count sanity check during sync:**
+- After analysis, verify total leaf count is reasonable
+- Formula: `expected_leaves ≈ total_tokens / 50k`
+- If actual leaves < expected * 0.3:
+  ```
+  ⚠️ WARNING: Intent layer may be under-decomposed
+  
+  Total source tokens: 5,217k
+  Expected leaves: ~104
+  Actual leaves: 38
+  Ratio: 0.36x (expected: 0.5x-2x)
+  
+  Consider re-running /intent-init for deeper hierarchy.
+  ```

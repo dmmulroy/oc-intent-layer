@@ -235,32 +235,59 @@ A directory becomes an intent node candidate when ANY of:
 - `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`
 - `setup.py`, `pom.xml`, `build.gradle`
 
-**IMPORTANT: Package manifest indicates semantic boundary, NOT "single node".**
-A package with 2M tokens still needs ~40 internal child nodes. The manifest location becomes a PARENT node if children exist.
+**⚠️ CRITICAL CLARIFICATION: Package manifest indicates semantic boundary, NOT "single node".**
+
+```
+WRONG MENTAL MODEL:
+  "package.json exists" → "this is one package" → "one node"
+  
+CORRECT MENTAL MODEL:
+  "package.json exists" → "this is a semantic boundary" → "check token count"
+  if tokens > 64k → "this boundary becomes a PARENT node, recurse inside"
+  if tokens ≤ 64k → "this boundary becomes a LEAF node"
+```
+
+A package with 1.4M tokens needs ~28 internal child nodes, not 1 node.
+The manifest location becomes a PARENT node that has children inside it.
 
 **Domain directory name:**
 - `services/`, `api/`, `domain/`, `lib/`, `pkg/`
 - `handlers/`, `controllers/`, `models/`, `utils/`
 - `core/`, `internal/`, `cmd/`, `src/`
 
-**Significant code mass:**
-- 20k-64k tokens ideal (best compression ratio)
-- <10k tokens: **MERGE with parent** (unless package manifest)
-- >64k tokens: **MUST recurse into subdirectories**
-- >100k tokens: **MUST have child nodes** (hard constraint)
+**Token-based boundaries (THE ACTUAL DETERMINING FACTOR):**
+- 20k-64k tokens ideal → LEAF NODE
+- <10k tokens → **MERGE with parent** (unless package manifest)
+- >64k tokens → **MUST recurse into subdirectories** (even if package manifest!)
+- >100k tokens → **MUST have child nodes** (HARD CONSTRAINT - validation fails otherwise)
 
 **Responsibility shift indicators:**
 - README or docs in directory
 - Distinct naming conventions
 - Clear module boundary
 
+**Monorepo patterns to watch for:**
+```
+packages/
+├── effect/          (1.4M tokens) → NOT a leaf! Needs ~28 children
+├── platform/        (1.5M tokens) → NOT a leaf! Needs ~30 children
+├── sql/             (39k tokens)  → Could be leaf (but check children)
+│   └── [many small sql-* siblings <10k each] → MERGE into sql/
+├── sql-pg/          (5k tokens)   → MERGE into packages/sql/
+├── sql-mysql2/      (4k tokens)   → MERGE into packages/sql/
+└── vitest/          (6k tokens)   → MERGE into root or appropriate parent
+```
+
 ### 5. Apply Recursive Decomposition (MANDATORY)
 
 **This algorithm is NOT optional. Apply it to EVERY directory >64k tokens.**
 
+**CRITICAL: Package manifest (package.json, Cargo.toml, etc.) indicates a BOUNDARY, not a stopping point.**
+A package with 1.4M tokens MUST be decomposed into ~28 child nodes. The manifest location becomes a PARENT node with children—it does NOT become a 1.4M token leaf.
+
 ```
 analyze(dir):
-  tokens = count_tokens(dir)  # recursive total
+  tokens = count_tokens(dir)  # RECURSIVE total (all descendant code)
   
   if tokens < 10k AND no_package_manifest(dir):
     return MERGE_INTO_PARENT
@@ -268,46 +295,85 @@ analyze(dir):
   if tokens <= 64k:
     return LEAF_NODE(dir)
   
-  # tokens > 64k: MUST decompose further
+  # tokens > 64k: MUST decompose further - NO EXCEPTIONS
+  # Even if this is a "package" with package.json, we MUST look inside
   children = []
   for subdir in get_subdirectories(dir):
     result = analyze(subdir)
     if result != MERGE_INTO_PARENT:
       children.append(result)
   
-  # If no valid children found but dir is >64k,
-  # it becomes a leaf anyway (code is flat)
+  # If no subdirectories found but dir is >64k, look for logical groupings:
+  # - Group files by prefix (user_*.ts, payment_*.ts)
+  # - Group by subdirectory under src/ (src/internal/, src/services/)
+  # - If truly flat with no structure, it becomes an oversized leaf (flagged)
   if len(children) == 0:
-    return LEAF_NODE(dir)  # flag as oversized if >100k
+    if tokens > 100k:
+      # CRITICAL: This is a VALIDATION FAILURE, not acceptable
+      return OVERSIZED_LEAF_ERROR(dir, tokens)
+    return LEAF_NODE(dir)  # 64k-100k is acceptable as leaf
   
-  # This directory becomes a PARENT node
+  # This directory becomes a PARENT node with child nodes
   return PARENT_NODE(dir, children)
 ```
 
-**Hard constraints:**
-- NO leaf node may cover >100k source tokens
-- Directories >64k tokens MUST recurse (not optional)
-- Keep recursing until ALL leaves are in 10k-64k range (or smallest possible)
+**HARD CONSTRAINTS (validation will FAIL if violated):**
+- **NO leaf node may cover >100k source tokens** — This is a HARD FAIL, not a warning
+- **Directories >64k tokens MUST have children** — Keep recursing until ALL leaves are in 10k-64k range
+- **Package directories are NOT exempt** — A 2M token package needs ~40 internal nodes
 
-**Example recursive decomposition:**
+**Common mistake to avoid:**
 ```
-packages/effect/ (2,538k tokens)
+WRONG: packages/effect/ (1.4M tokens) → single leaf node
+       "It has package.json so it's one package = one node"
+
+RIGHT: packages/effect/ (1.4M tokens) → PARENT node
+       ├── src/internal/stm/ (67k) → leaf
+       ├── src/internal/channel/ (20k) → leaf
+       ├── test/Schema/ (91k) → PARENT (still too big!)
+       │   ├── test/Schema/Class/ (30k) → leaf
+       │   └── test/Schema/Struct/ (25k) → leaf
+       └── ... (~28 total leaves)
+```
+
+**Example recursive decomposition (Effect monorepo case study):**
+
+```
+packages/effect/ (1,412k tokens) — HAS package.json, but 1.4M >> 64k, so MUST recurse
 ├── src/ (997k) → too big, recurse
 │   ├── internal/ (454k) → too big, recurse
 │   │   ├── stm/ (67k) → LEAF NODE ✓
-│   │   ├── channel/ (20k) → LEAF NODE ✓
-│   │   ├── metric/ (13k) → LEAF NODE ✓
-│   │   ├── effect/ (8k) → merge candidate
+│   │   ├── channel/ (45k) → LEAF NODE ✓
+│   │   ├── stream/ (89k) → too big, recurse further
+│   │   │   ├── stream/core.ts + related (40k) → LEAF NODE ✓
+│   │   │   └── stream/sink.ts + related (35k) → LEAF NODE ✓
+│   │   ├── schema/ (120k) → too big, recurse
+│   │   │   ├── schema/AST/ (45k) → LEAF NODE ✓
+│   │   │   └── schema/Parser/ (55k) → LEAF NODE ✓
 │   │   └── ...
-│   └── [other src subdirs...]
+│   └── [public API files] (200k) → recurse by domain
+│       ├── Effect.ts + core (50k) → LEAF NODE ✓
+│       ├── Stream.ts + streaming (40k) → LEAF NODE ✓
+│       └── Schema.ts + validation (60k) → LEAF NODE ✓
 ├── test/ (349k) → too big, recurse
-│   ├── Schema/ (91k) → too big, recurse further
-│   ├── Stream/ (73k) → LEAF NODE ✓
-│   └── Effect/ (66k) → LEAF NODE ✓
+│   ├── Schema/ (91k) → still >64k, recurse further!
+│   │   ├── Schema/Class/ (30k) → LEAF NODE ✓
+│   │   ├── Schema/Struct/ (35k) → LEAF NODE ✓
+│   │   └── Schema/parsing/ (26k) → LEAF NODE ✓
+│   ├── Stream/ (73k) → LEAF NODE ✓ (borderline ok)
+│   └── Effect/ (66k) → LEAF NODE ✓ (borderline ok)
 └── dtslint/ (78k) → LEAF NODE ✓
 
-Result: ~50 leaf nodes, not 1
+Result for 1.4M token package: ~28 leaf nodes
+NOT: 1 node (would violate 100k max leaf constraint)
 ```
+
+**Monorepo reality check:**
+- Effect monorepo total: ~5.2M tokens
+- Expected leaves: 5200k / 50k = ~104 leaves
+- packages/effect/ alone (1.4M) needs: 1400k / 50k = ~28 leaves
+- packages/platform/ alone (1.5M) needs: 1500k / 50k = ~30 leaves
+- If your plan has 38 leaves for 5.2M tokens, you're at 0.36x expected — **VALIDATION MUST FAIL**
 
 ### 6. Apply Node Count Heuristics
 
@@ -348,7 +414,9 @@ After merge:
 Recommendation: 1 node (root only)
 ```
 
-### 7. Validate Capture Plan (REQUIRED)
+### 7. Validate Capture Plan (REQUIRED - HARD GATE)
+
+**⛔ DO NOT PROCEED TO OUTPUT until ALL validation checks pass.**
 
 **Before presenting the plan to the user, verify ALL of these constraints:**
 
@@ -356,45 +424,78 @@ Recommendation: 1 node (root only)
 VALIDATION CHECKLIST:
 ═════════════════════
 
-1. No oversized leaves
+1. No oversized leaves (HARD FAIL)
    [ ] Every leaf node ≤ 100k tokens
-   → If ANY leaf >100k: FAIL - must recurse further
+   → If ANY leaf >100k: ⛔ STOP - cannot proceed, must recurse further
+   → This is NOT a warning, it's a blocking failure
 
-2. Node count sanity
+2. Node count sanity (HARD FAIL if <0.3x)
    [ ] actual_leaves within 0.5x-2x of (total_tokens / 50k)
-   → If ratio <0.5x: WARNING - probably need more decomposition
-   → If ratio >2x: WARNING - may have too many small nodes
+   → If ratio <0.3x: ⛔ STOP - severely under-decomposed
+   → If ratio <0.5x: ⚠️ WARNING - likely need more decomposition
+   → If ratio >2x: ⚠️ WARNING - may have too many small nodes
 
-3. Parents have children
+3. Parents have children (HARD FAIL)
    [ ] Every node >64k tokens has child nodes listed
-   → If >64k with no children: FAIL - missing decomposition
+   → If >64k with no children: ⛔ STOP - missing decomposition
 
 4. Coverage complete
    [ ] Sum of leaf coverage ≈ total repo tokens
 ```
 
-**Example validation:**
+**VALIDATION IS A HARD GATE - Example of what happens:**
+
 ```
-VALIDATION
-──────────
-Total source tokens:  5,765k
-Expected leaves:      ~115 (5765k / 50k)
-Actual leaves:        14
-Ratio:                0.12x ← FAIL (need ~8x more decomposition)
+VALIDATION ATTEMPT #1
+─────────────────────
+Total source tokens:  5,217k
+Expected leaves:      ~104 (5217k / 50k)
+Actual leaves:        38
+Ratio:                0.36x ← ⛔ HARD FAIL (<0.5x)
 
-Oversized leaves:     2
-  packages/effect/    2,538k ← FAIL (>100k, needs children)
-  packages/platform/  2,128k ← FAIL (>100k, needs children)
+Oversized leaves:     7
+  packages/effect/         1,412k ← ⛔ FAIL (14x over 100k limit!)
+  packages/platform/       1,540k ← ⛔ FAIL (15x over 100k limit!)
+  packages/ai/openai/        232k ← ⛔ FAIL (>100k)
+  packages/cli/              110k ← ⛔ FAIL (>100k)
+  packages/ai/ai/            103k ← ⛔ FAIL (>100k)
+  packages/cluster/           87k ← OK (borderline)
+  packages/ai/google/         66k ← OK
 
-⛔ VALIDATION FAILED - Re-run with deeper recursion
+⛔ VALIDATION FAILED - 5 leaves exceed 100k limit
+   CANNOT PROCEED - Must recursively analyze:
+   - packages/effect/ (need ~28 sub-nodes)
+   - packages/platform/ (need ~30 sub-nodes)
+   - packages/ai/openai/ (need ~5 sub-nodes)
+   - packages/cli/ (need ~2 sub-nodes)
+   - packages/ai/ai/ (need ~2 sub-nodes)
+
+RE-RUNNING DECOMPOSITION...
+```
+
+```
+VALIDATION ATTEMPT #2 (after deeper recursion)
+──────────────────────────────────────────────
+Total source tokens:  5,217k
+Expected leaves:      ~104 (5217k / 50k)
+Actual leaves:        97
+Ratio:                0.93x ← ✓ PASS
+
+Oversized leaves:     0 ← ✓ PASS
+Largest leaf:         73k (packages/effect/test/Stream/) ← OK
+
+✓ VALIDATION PASSED - Ready to present plan
 ```
 
 **If validation fails:**
-1. Re-analyze directories that are too large
-2. Apply recursive decomposition more deeply
-3. Re-validate until all constraints pass
+1. DO NOT present plan to user
+2. Identify ALL directories that caused failure
+3. Re-run analyze() on each failed directory with deeper recursion
+4. Re-validate
+5. Loop until ALL constraints pass
+6. Only THEN present plan to user
 
-**Only present plan to user AFTER validation passes.**
+**The agent MUST NOT skip validation or present a failing plan.**
 
 ### 8. Determine Capture Order
 
@@ -478,7 +579,7 @@ Common case—OpenCode users often have root AGENTS.md with project-level instru
 
 ## Output Format
 
-**Only present this AFTER validation passes (see Step 7).**
+**⛔ ONLY present this AFTER validation passes (see Step 7). NEVER present a failing plan.**
 
 Present to user:
 
@@ -488,15 +589,20 @@ Intent Layer Capture Plan
 
 Target: [path]
 Token counting: tiktoken (o200k_base) via [method]
-Total code tokens: [N]k
+Total source tokens: [N]k
 
-VALIDATION PASSED ✓
-───────────────────
-Expected leaves:    ~[N/50]
-Actual leaves:      [L]
-Ratio:              [L/(N/50)]x ✓
-Oversized leaves:   0 ✓
-Coverage:           100% ✓
+HIERARCHY HEALTH ✓
+──────────────────
+Leaf coverage:
+  Expected leaves:      ~[N/50] (source ÷ 50k)
+  Planned leaves:       [L]
+  Coverage ratio:       [L/(N/50)]x ✓
+
+Leaf sizing:
+  Largest planned leaf: [max]k (limit: 100k) ✓
+  Average leaf size:    [N/L]k (target: 30-60k) ✓
+  
+Estimated intent layer: ~[L*0.5]k tokens ([L*0.5/N]% of source)
 
 Existing AGENTS.md:
 ───────────────────
@@ -517,14 +623,17 @@ PARENT NODES ([P] total, summarize children not code):
 ──────────────────────────────────────────────────────
  1. packages/effect/src/internal/  454k  (8 children)
  2. packages/effect/src/           997k  (3 children)
- 3. packages/effect/             2,538k  (4 children)
+ 3. packages/effect/             1,412k  (4 children)  ← Was decomposed from 1.4M to 28 leaves
  ...
-[P]. ./                          5,765k  (root, [N] children)
+[P]. ./                          5,217k  (root, [N] children)
 
 Merged (below threshold, NO AGENTS.md created):
 ────────────────────────────────────────────────
 - packages/effect/src/internal/effect/ (8k) → inlined in packages/effect/src/internal/AGENTS.md
 - packages/vitest/ (10k) → inlined in root AGENTS.md
+- packages/sql-pg/ (5k) → inlined in packages/sql/AGENTS.md
+- packages/sql-mysql2/ (4k) → inlined in packages/sql/AGENTS.md
+[... all SQL adapters <10k merged into packages/sql/ ...]
 
 ⚠️  IMPORTANT: Merged items must be:
    1. Summarized inline in their parent's AGENTS.md ("Inlined (Below Threshold)" section)
@@ -540,12 +649,20 @@ Capture Order (leaf → root):
 [Then parents, bottom-up]
 [Root last]
 
-⚠️  Notes:
-- [any warnings about slightly oversized nodes]
-- [legacy files at unexpected locations]
 ```
 
 Then ask: "Proceed with this capture plan? [y/n/modify]"
+
+**NEVER OUTPUT THIS FORMAT IF VALIDATION FAILED:**
+```
+⛔ INVALID OUTPUT - DO NOT PRESENT TO USER:
+
+LEAF NODES:
+ 1. packages/effect/    1,412k  ← WRONG! This is >100k, cannot be a leaf!
+ 2. packages/platform/  1,540k  ← WRONG! This is >100k, cannot be a leaf!
+
+If you see leaves >100k tokens in your plan, STOP and recurse deeper.
+```
 
 ### Pass Merge Information to Capture
 
@@ -581,3 +698,40 @@ MERGE_STATE:
 - **Validation is mandatory** — never present a plan that fails token constraints
 - **Recursive decomposition is mandatory** — directories >64k MUST be analyzed further
 - **Sanity check**: If your leaf count is <50% of `total_tokens / 50k`, you haven't recursed enough
+
+## Final Checklist Before Output
+
+**Before presenting ANY capture plan, verify:**
+
+```
+□ Did I recursively analyze directories >64k tokens?
+  - packages/effect/ at 1.4M → did I look inside src/, test/, etc.?
+  - NOT just "it's a package so it's one node"
+
+□ Are ALL my leaf nodes ≤100k tokens?
+  - If ANY leaf is 200k, 500k, 1M+ tokens → I FAILED, must recurse
+
+□ Is my leaf count reasonable?
+  - Formula: expected = total_tokens / 50k
+  - If actual < expected * 0.5 → I probably stopped too early
+
+□ Did I merge small items (<10k)?
+  - sql-pg at 5k, sql-mysql2 at 4k → should merge into parent sql/
+  - NOT create 13 separate tiny nodes
+
+□ Did I validate before presenting?
+  - Validation MUST pass before showing plan to user
+  - If validation fails, re-run decomposition, don't just show warnings
+```
+
+**Common failure mode to avoid:**
+```
+❌ "I see 36 packages in packages/, so I'll create 36 nodes"
+   WRONG - token mass determines nodes, not package count
+
+✓ "I see 36 packages totaling 5.2M tokens. Expected ~104 leaves.
+   packages/effect (1.4M) needs ~28 internal nodes.
+   packages/platform (1.5M) needs ~30 internal nodes.
+   13 sql-* packages (<10k each) merge into 1 parent node.
+   Let me recurse into the large packages..."
+```

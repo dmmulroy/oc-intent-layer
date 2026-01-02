@@ -108,6 +108,8 @@ Proceeding with intent layer bootstrap...
 
 Run @intent-chunk to analyze codebase and generate capture plan.
 
+**⛔ THIS PHASE IS A HARD GATE - Cannot proceed to Phase 2 until validation passes.**
+
 This includes:
 - **Audit existing AGENTS.md files**: Classify as intent nodes (skip) or legacy (extract & replace)
 - **Token analysis**: Calculate ACTUAL code mass per directory using tiktoken
@@ -138,13 +140,33 @@ This includes:
 - >64k tokens: MUST recurse into subdirectories
 - >100k tokens: MUST have child nodes (no exceptions)
 
-**Validation requirement:**
+**⛔ VALIDATION IS A HARD GATE:**
+
 The capture plan MUST pass validation before presenting to user:
-- No leaf node >100k tokens
-- Leaf count within 0.5x-2x of `total_tokens / 50k`
-- All nodes >64k have children listed
+- **No leaf node >100k tokens** — If ANY leaf exceeds this, chunking MUST re-run with deeper recursion
+- **Leaf count within 0.5x-2x of `total_tokens / 50k`** — If ratio <0.3x, it's a hard failure
+- **All nodes >64k have children listed** — Cannot have a 1.4M token "leaf"
+
+**Example of what must NOT happen:**
+```
+❌ WRONG: Chunking produces plan with:
+   - packages/effect/ as leaf (1.4M tokens) 
+   - packages/platform/ as leaf (1.5M tokens)
+   - 38 total leaves for 5.2M token repo (ratio: 0.36x)
+   
+   This violates constraints. DO NOT proceed to Phase 2.
+   Re-run chunking with deeper recursion.
+
+✓ RIGHT: Chunking produces plan with:
+   - packages/effect/ as PARENT with 28 child nodes
+   - packages/platform/ as PARENT with 30 child nodes  
+   - 97 total leaves for 5.2M token repo (ratio: 0.93x)
+   
+   This passes validation. Proceed to Phase 2.
+```
 
 Present the plan and ask user to confirm before proceeding.
+**If validation failed, do NOT ask to proceed—inform user that re-analysis is required.**
 
 **If legacy files found:**
 ```
@@ -165,11 +187,32 @@ Proceed? [y/n]
 
 ## Phase 2: Discovery Pass (Agentic)
 
+**Prerequisites:**
+- Phase 1 validation MUST have passed
+- Capture plan MUST have no leaves >100k tokens
+- Leaf count ratio MUST be ≥0.5x of expected
+
 For each node in the confirmed leaf-first order, run @intent-capture in **discovery mode**:
 
 ```
 Discovery Pass: Analyzing [N] nodes...
 ══════════════════════════════════════
+```
+
+**Pre-discovery sanity check:**
+```
+Nodes to capture: [N]
+  Leaf nodes: [L] (avg ~[X]k tokens each)
+  Parent nodes: [P]
+  
+Largest leaf: [name] at [Y]k tokens
+  → Must be ≤100k ✓
+  
+Total coverage: [T]k tokens
+Expected leaves: ~[T/50]
+Actual leaves: [L]
+Ratio: [L/(T/50)]x
+  → Must be ≥0.5x ✓
 ```
 
 **Discovery mode behavior:**
@@ -179,6 +222,11 @@ Discovery Pass: Analyzing [N] nodes...
 - Collect questions that genuinely need SME input
 - Perform LCA analysis across all discovered questions
 - Do NOT prompt user during this phase
+
+**For each node, verify before capturing:**
+- If leaf node: confirm token count ≤100k
+- If parent node: confirm children exist in plan
+- If oversized: STOP and report chunking error
 
 For each node:
 ```
@@ -381,20 +429,28 @@ Make executable: `chmod +x .git/hooks/pre-push`
 
 ## Phase 6: Final Summary
 
-Calculate and display context compaction savings:
+Calculate and display hierarchy health metrics:
 
 **Calculate metrics:**
 - **Source tokens**: Sum of all raw code tokens analyzed during chunking
 - **Intent layer tokens**: Sum of all generated AGENTS.md token counts  
-- **Compression ratio**: Source tokens ÷ Intent layer tokens
-- **Exploration savings**: Estimated tokens saved per task vs "dark room navigation"
+- **Leaf count**: Number of leaf nodes (no children)
+- **Expected leaves**: `source_tokens / 50k`
+- **Leaf coverage ratio**: `actual_leaves / expected_leaves`
+- **Average leaf coverage**: `source_tokens / leaf_count`
+- **Largest leaf**: Size of biggest leaf node
+- **Intent layer overhead**: `intent_tokens / source_tokens` as percentage
 
-**Compression ratio interpretation:**
-- 50:1 - 100:1 = Typical for well-structured codebases
-- 100:1 - 400:1 = Excellent compression (cohesive code, clear boundaries)
-- < 50:1 = May indicate too many small nodes or verbose node content
+**Hierarchy health interpretation:**
 
-**Exploration savings calculation:**
+| Metric | Healthy | Warning | Problem |
+|--------|---------|---------|---------|
+| Leaf coverage ratio | 0.8x - 1.2x | 0.5x - 0.8x | <0.5x (under-decomposed) |
+| Largest leaf | ≤64k | 64k-100k | >100k (oversized) |
+| Average leaf coverage | 30k-60k | 20k-30k or 60k-80k | <20k or >80k |
+| Intent layer overhead | 0.5% - 2% | 2% - 4% | >4% (verbose) or <0.3% (too sparse) |
+
+**Per-task context savings:**
 Without intent layer, agents typically consume ~40k+ tokens per task exploring:
 - Query tokens: ~500
 - Exploration overhead (ls, grep): ~15k
@@ -409,33 +465,47 @@ With intent layer, agents consume:
 Intent Layer Bootstrap Complete
 ═══════════════════════════════
 
-CONTEXT COMPACTION
-──────────────────
+HIERARCHY HEALTH
+────────────────
 Source code analyzed:     ~[X]k tokens
 Intent layer generated:   ~[Y]k tokens ([N] nodes)
-Compression ratio:        [X/Y]:1
 
-Per-task savings (estimated):
-  Without intent layer:   ~40k+ tokens (exploration overhead)
-  With intent layer:      ~[Z]k tokens (targeted context)
-  Savings per task:       ~[40-Z]k tokens ([percentage]%)
+Leaf node coverage:
+  Expected leaves:        ~[X/50] (based on source size)
+  Actual leaves:          [L]
+  Coverage ratio:         [L/(X/50)]x [✓ healthy | ⚠ warning | ✗ problem]
 
-LCA efficiency:
-  Facts deduplicated:     [D] (placed at common ancestors)
-  Redundancy eliminated:  ~[R]k tokens
+Leaf sizing:
+  Largest leaf:           [max]k tokens [✓ ≤64k | ⚠ ≤100k | ✗ >100k]
+  Average leaf coverage:  [X/L]k tokens [✓ 30-60k | ⚠ outside range]
+  Smallest leaf:          [min]k tokens
+
+Intent layer overhead:    [Y/X]% of source [✓ typical | ⚠ note]
 
 Token counting method:    [tiktoken via node | tiktoken via python | bytes/4 estimation]
 
-NODES CREATED
-─────────────
-[N] nodes across [L] hierarchy levels
+HIERARCHY STRUCTURE
+───────────────────
+[N] total nodes:
+  [L] leaf nodes (capture code directly)
+  [P] parent nodes (summarize children)
+  [D] max depth levels
 
-[Tree visualization showing node structure with token counts]
-Root (~Xk)
-├── /services/ (~Yk)
-│   ├── /payment/ (~Zk)
-│   └── /billing/ (~Wk)
-└── /lib/ (~Vk)
+[Tree visualization with SOURCE token counts, not intent tokens]
+./ (5,217k total)
+├── packages/effect/ (1,412k) ← PARENT, 28 children
+│   ├── src/internal/stm/ (67k) ← LEAF ✓
+│   ├── src/internal/channel/ (45k) ← LEAF ✓
+│   └── ...
+├── packages/platform/ (1,540k) ← PARENT, 30 children
+└── packages/sql/ (85k) ← PARENT, merged 13 small adapters
+    └── [sql-pg, sql-mysql2, etc. inlined]
+
+CONTEXT SAVINGS (per task)
+──────────────────────────
+Without intent layer:     ~40k+ tokens (exploration overhead)
+With intent layer:        ~[Z]k tokens (targeted navigation)
+Estimated savings:        ~[40-Z]k tokens per task
 
 LEGACY MIGRATION
 ────────────────
@@ -454,7 +524,7 @@ INSTALLATION
 ────────────
 Pre-push hook: ✓ installed
 
-Commands now available:
+Commands available:
   /intent-capture [path]  Capture/update single node
   /intent-sync            Sync nodes after code changes
 
@@ -464,8 +534,45 @@ NEXT STEPS
 • Resolve remaining Open Questions via /intent-capture on parent nodes
 • Address Pending Tasks as technical debt
 • Hook will warn when pushing changes without AGENTS.md updates
+```
 
-Your agents now start every task with [compression ratio]:1 more efficient context.
+**Example healthy output:**
+```
+HIERARCHY HEALTH
+────────────────
+Source code analyzed:     ~5,217k tokens
+Intent layer generated:   ~45k tokens (97 nodes)
+
+Leaf node coverage:
+  Expected leaves:        ~104 (based on source size)
+  Actual leaves:          97
+  Coverage ratio:         0.93x ✓ healthy
+
+Leaf sizing:
+  Largest leaf:           73k tokens ⚠ slightly over 64k (acceptable)
+  Average leaf coverage:  54k tokens ✓ in ideal range
+  Smallest leaf:          12k tokens
+
+Intent layer overhead:    0.86% of source ✓ typical
+```
+
+**Example problematic output (should NOT happen after validation):**
+```
+HIERARCHY HEALTH
+────────────────
+Source code analyzed:     ~5,217k tokens
+Intent layer generated:   ~22k tokens (38 nodes)
+
+Leaf node coverage:
+  Expected leaves:        ~104 (based on source size)
+  Actual leaves:          38
+  Coverage ratio:         0.36x ✗ UNDER-DECOMPOSED
+
+Leaf sizing:
+  Largest leaf:           1,412k tokens ✗ OVERSIZED (14x limit!)
+  Average leaf coverage:  137k tokens ✗ way too large
+  
+⛔ This hierarchy is malformed. Re-run /intent-init.
 ```
 
 ## Resume Support

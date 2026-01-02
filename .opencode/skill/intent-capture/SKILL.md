@@ -9,9 +9,43 @@ Capture intent node for: $ARGUMENTS (default: current directory)
 - **Discovery mode**: Generate draft without user interaction, collect questions
 - **Interactive mode**: Full SME interview (default for /intent-capture command)
 
+## Phase 0: Validate Node Assignment
+
+**Before reading ANY code, verify this node is correctly sized:**
+
+```bash
+# Count tokens in this directory (recursive)
+tokens = count_tokens(target_directory)
+```
+
+**Pre-capture validation:**
+```
+if tokens > 100k AND node_type == "leaf":
+  ⛔ STOP - This directory is too large to be a leaf node!
+  
+  "This directory contains ~[X]k tokens but was assigned as a leaf node.
+   Leaf nodes must be ≤100k tokens.
+   
+   This indicates the chunking phase didn't recurse deeply enough.
+   
+   Options:
+   1. Re-run /intent-init to regenerate capture plan with proper decomposition
+   2. Manually identify subdirectories to create child nodes first
+   
+   Cannot proceed with capture until this is resolved."
+  
+  EXIT - Do not generate AGENTS.md for oversized leaf
+```
+
+**This check prevents the common failure mode where a 1.4M token package gets a single AGENTS.md.**
+
 ## Phase 1: Read
 
 ### Leaf Node (no child AGENTS.md)
+
+**First, verify this is actually a valid leaf:**
+- Token count MUST be ≤100k
+- If >100k tokens with no children, this is a chunking error—do not proceed
 
 Read ALL code files in target directory:
 - Use glob to find code files (same extensions as @intent-chunk)
@@ -24,6 +58,11 @@ Read child AGENTS.md files ONLY—this is fractal compression:
 - Do NOT read child code directly
 - Note each child's: Purpose, Entry Points, Contracts, Open Questions
 - Collect all child Open Questions for LCA resolution
+
+**For parent nodes, also read inlined children:**
+- Check merge_map from capture plan
+- For items that were merged into this parent, read their code directly
+- These will be summarized in "Inlined (Below Threshold)" section
 
 ### Legacy AGENTS.md Handling
 
