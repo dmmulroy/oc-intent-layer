@@ -2,7 +2,7 @@
 set -e
 
 # Intent Layer Tools Installer for OpenCode
-# Installs skills and commands globally to ~/.config/opencode/
+# Installs only /intent-init command - other components install on first run
 
 REPO_URL="https://github.com/dmmulroy/oc-intent-layer"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
@@ -34,45 +34,29 @@ else
   git clone "$REPO_URL" "$INSTALL_DIR"
 fi
 
-# Create skill and command directories
-mkdir -p "$CONFIG_DIR/skill"
+# Create command directory
 mkdir -p "$CONFIG_DIR/command"
 
-# Symlink skills
+# Only symlink intent-init command
+# Other skills and commands are installed during /intent-init execution
 echo ""
-echo "Linking skills..."
-for skill_dir in "$INSTALL_DIR/.opencode/skill/"*/; do
-  skill_name=$(basename "$skill_dir")
-  target="$CONFIG_DIR/skill/$skill_name"
-  if [ -L "$target" ] || [ -d "$target" ]; then
-    rm -rf "$target"
-  fi
-  ln -s "$skill_dir" "$target"
-  echo "  @$skill_name"
-done
-
-# Symlink commands
-echo ""
-echo "Linking commands..."
-for cmd_file in "$INSTALL_DIR/.opencode/command/"*.md; do
-  cmd_name=$(basename "$cmd_file" .md)
-  target="$CONFIG_DIR/command/$cmd_name.md"
-  if [ -L "$target" ] || [ -f "$target" ]; then
-    rm -f "$target"
-  fi
-  ln -s "$cmd_file" "$target"
-  echo "  /$cmd_name"
-done
+echo "Linking /intent-init command..."
+cmd_file="$INSTALL_DIR/.opencode/command/intent-init.md"
+cmd_name="intent-init"
+target="$CONFIG_DIR/command/$cmd_name.md"
+if [ -L "$target" ] || [ -f "$target" ]; then
+  rm -f "$target"
+fi
+ln -s "$cmd_file" "$target"
+echo "  /$cmd_name"
 
 echo ""
 echo "Installation complete!"
-echo ""
-echo "Available commands:"
-echo "  /intent-init      Bootstrap intent layer for a project"
-echo "  /intent-capture   Capture single intent node"
-echo "  /intent-sync      Sync nodes after code changes"
 echo ""
 echo "Get started:"
 echo "  cd your-project"
 echo "  opencode"
 echo "  /intent-init"
+echo ""
+echo "The /intent-init command will install additional components"
+echo "(skills, other commands, tiktoken) on first run."

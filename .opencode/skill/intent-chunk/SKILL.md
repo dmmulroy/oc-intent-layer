@@ -9,7 +9,55 @@ Target: $ARGUMENTS (default: project root)
 
 ## Process
 
-### 0. Audit Existing AGENTS.md Files
+### 0. Determine Token Counting Method
+
+**IMPORTANT: You MUST actually attempt tiktoken before falling back to estimation.**
+
+Try each method IN ORDER and use the first that succeeds:
+
+**Step 1 - Try npx js-tiktoken:**
+```bash
+# Actually run this command - don't skip it
+echo "test content" | npx js-tiktoken --encoding o200k_base 2>/dev/null
+```
+If this returns a number, use `TIKTOKEN_METHOD=npx`
+
+**Step 2 - Try Python tiktoken:**
+```bash
+# Actually run this command - don't skip it
+python3 -c "import tiktoken; enc=tiktoken.get_encoding('o200k_base'); print(len(enc.encode('test')))" 2>/dev/null
+```
+If this prints a number, use `TIKTOKEN_METHOD=python`
+
+**Step 3 - Fall back to estimation (last resort):**
+Only if BOTH above methods failed, use `TIKTOKEN_METHOD=estimated`
+
+**Report which method will be used:**
+```
+Token Counting Method
+═════════════════════
+Tried npx js-tiktoken: [✓ available | ✗ not available]
+Tried Python tiktoken: [✓ available | ✗ not available]
+Using: [tiktoken via npx | tiktoken via python | estimation (bytes/4)]
+```
+
+**If using estimation, warn about accuracy:**
+```
+⚠️  WARNING: Using bytes/4 estimation (tiktoken unavailable)
+   Token counts may be ~20% inaccurate.
+   Node boundary decisions may be suboptimal.
+   
+   For accurate counts:
+     - Ensure npx is available (comes with npm/node)
+     - Or install Python tiktoken: pip3 install tiktoken
+```
+
+Set the method for use in later steps:
+```
+TIKTOKEN_METHOD: [npx|python|estimated]
+```
+
+### 1. Audit Existing AGENTS.md Files
 
 Before analyzing structure, find and classify ALL existing AGENTS.md files.
 
@@ -46,7 +94,7 @@ is_intent_node(content):
 - Any tribal knowledge
 - Project instructions or agent directives
 
-Store extracted content in session state—will feed into capture phase.
+Store extracted content in session state—will feed into discovery pass.
 
 **Check boundary alignment:**
 For each legacy file, note whether its location aligns with a semantic boundary:
@@ -105,12 +153,12 @@ AUDIT_STATE:
 └── user_decisions: {path: action}
 ```
 
-### 1. Walk Directory Tree
+### 2. Walk Directory Tree
 
 Recursively traverse from target, collecting:
 - Directory paths
 - Code file counts per directory
-- Token estimates per directory (code files only)
+- Token counts per directory (code files only) **[MUST use tiktoken]**
 
 **Skip directories:**
 - `node_modules`, `.git`, `dist`, `build`, `vendor`
@@ -130,44 +178,44 @@ Recursively traverse from target, collecting:
 - Shell: `.sh`, `.bash`
 - Config as code: `.yaml`, `.yml`, `.json`, `.toml` (only if significant logic)
 
-### 2. Calculate Token Counts
+### 3. Calculate Token Counts
 
-Try methods in order until one succeeds:
+**Use the method determined in Step 0. Always indicate which method was used.**
 
-**1. npx js-tiktoken (preferred):**
+**If TIKTOKEN_METHOD=npx:**
 ```bash
-# Count tokens for a file via npx (no install needed)
-npx js-tiktoken <file> --encoding o200k_base
+# Count tokens for a file
+cat <file> | npx js-tiktoken --encoding o200k_base
 ```
 
-If npx unavailable or fails, try Python.
-
-**2. Python tiktoken fallback:**
-```bash
-python3 -c "import tiktoken" 2>/dev/null && echo "available"
-```
+**If TIKTOKEN_METHOD=python:**
 ```python
 import tiktoken
 enc = tiktoken.get_encoding("o200k_base")
-tokens = len(enc.encode(file_content))
+with open(filepath) as f:
+    tokens = len(enc.encode(f.read()))
 ```
 
-**3. Estimation fallback:**
-If neither available: `tokens ≈ bytes / 4`
+**If TIKTOKEN_METHOD=estimated (fallback only):**
+```bash
+# Rough estimation - only use if tiktoken unavailable
+wc -c <file> | awk '{print int($1/4)}'
+```
 
 **Encoding reference:**
 | Encoding | Models |
 |----------|--------|
-| `o200k_base` | GPT-4o, GPT-4o-mini (recommended) |
+| `o200k_base` | GPT-4o, GPT-4o-mini, Claude (recommended) |
 | `cl100k_base` | GPT-4, GPT-3.5-turbo, embeddings |
 
-Note in output which method was used:
-- `[tiktoken]` — accurate count (npx or python)
-- `[estimated]` — bytes/4 approximation
+**Always note which method was used in output:**
+```
+Token counting: [tiktoken (o200k_base) via npx | tiktoken (o200k_base) via python | estimated (bytes/4)]
+```
 
 For each directory, sum tokens of all code files (non-recursive—direct children only for leaf identification).
 
-### 3. Identify Semantic Boundaries
+### 4. Identify Semantic Boundaries
 
 A directory becomes an intent node candidate when ANY of:
 
@@ -182,7 +230,7 @@ A directory becomes an intent node candidate when ANY of:
 
 **Significant code mass:**
 - 20k-64k tokens ideal (best compression ratio)
-- <10k tokens: consider merging with parent
+- <10k tokens: **MERGE with parent** (unless package manifest)
 - >100k tokens: likely needs child nodes
 
 **Responsibility shift indicators:**
@@ -190,26 +238,60 @@ A directory becomes an intent node candidate when ANY of:
 - Distinct naming conventions
 - Clear module boundary
 
-### 4. Determine Capture Order
+### 5. Apply Node Count Heuristics
+
+**Based on TOTAL repository token count, recommend node structure:**
+
+| Total Tokens | Recommended Nodes | Strategy |
+|--------------|-------------------|----------|
+| < 20k | 1 | Root only—below compression threshold |
+| 20k-64k | 1-2 | Single root, or root + 1 major module |
+| 64k-150k | 2-4 | Root + major semantic boundaries |
+| 150k-500k | 4-8 | Hierarchical decomposition |
+| > 500k | 8+ | Full tree, possibly monorepo treatment |
+
+**Apply merge rule aggressively:**
+- If a candidate node has < 10k tokens AND no package manifest → merge into parent
+- If merging would create a node > 64k tokens → keep separate
+- If clear semantic boundary (different language, different responsibility) → keep separate
+
+**Example heuristic application:**
+```
+Total repo: 35k tokens
+
+Initial candidates:
+  ./lib/utils/     2k tokens  → MERGE (too small)
+  ./services/api/  8k tokens  → MERGE (too small)
+  ./config/        500 tokens → MERGE (too small)
+  ./              24k tokens
+
+After merge:
+  ./              35k tokens (single node)
+
+Recommendation: 1 node (root only)
+```
+
+### 6. Determine Capture Order
 
 **Principle:** Leaf-first, easy-first.
 
 1. Identify all leaf candidates (no child intent nodes)
 2. **Exclude intent nodes found in audit** (already captured)
 3. **Include legacy locations** if at semantic boundaries (will replace)
-4. Sort leaves by estimated complexity (simpler first):
+4. **Apply merge heuristics** - remove candidates below threshold
+5. Sort leaves by estimated complexity (simpler first):
    - Fewer files = simpler
    - Smaller token count = simpler
    - Utils/helpers before core domain
-5. After leaves, capture parents in bottom-up order
-6. Root node captured last
+6. After leaves, capture parents in bottom-up order
+7. Root node captured last
 
 **Why leaf-first:**
 - Parents summarize child AGENTS.md, not code
 - Context compounds—simple areas illuminate complex ones
 - Open questions resolve during parent capture
 
-### 5. Map Legacy Content to Nodes
+### 7. Map Legacy Content to Nodes
 
 For each legacy file from audit:
 
@@ -230,7 +312,7 @@ Nearest boundary: ./utils/ (25k tokens, IS a boundary)
 → ./utils/ tagged with legacy content from ./utils/helpers/
 ```
 
-### 6. Handle Edge Cases
+### 8. Handle Edge Cases
 
 **Monorepo:** Each independent project gets separate capture pass. Identify by:
 - Multiple package manifests at same depth
@@ -256,7 +338,8 @@ Intent Layer Capture Plan
 ═════════════════════════
 
 Target: [path]
-Total code tokens: [N]k
+Token counting: tiktoken (o200k_base) via [method]
+Total code tokens: [N]k [tiktoken]
 Proposed nodes: [M]
 
 Existing AGENTS.md:
@@ -267,21 +350,25 @@ Legacy files (replace): [Y]
   ./AGENTS.md → extract & replace
   ./api/AGENTS.md → extract & replace
 
-Directory Tree (with token estimates):
-─────��────────────────────────────────
+Directory Tree (with token counts):
+───────────────────────────────────
 [tree view with token counts, marking nodes with legacy content]
+
+Node Count Recommendation:
+──────────────────────────
+Total tokens: [N]k → [M] nodes recommended
+Merged candidates: [list any directories merged due to size]
 
 Capture Order (leaf → root):
 ────────────────────────────
-1. /path/to/simple-leaf/     (~Xk tokens) - [reason: utils, small]
-2. /api/                     (~Yk tokens) - [reason: clear boundary] ◀ has legacy
-3. /path/to/another-leaf/    (~Zk tokens) - [reason: domain module]
+1. /path/to/module/          (~Xk tokens) [tiktoken] - [reason]
+2. /api/                     (~Yk tokens) [tiktoken] - [reason] ◀ has legacy
 ...
 N. /                         (summarizes children) ◀ has legacy
 
 Skipped (below threshold):
 ──────────────────────────
-- /path/tiny/  (800 tokens, no manifest)
+- /path/tiny/  (800 tokens, merged into parent)
 
 Legacy content lifting:
 ───────────────────────
@@ -296,8 +383,10 @@ Then ask: "Proceed with this capture plan? [y/n/modify]"
 
 ## Notes
 
-- Token counts via tiktoken are accurate; fallback estimates may vary ±20%
+- **Always TRY tiktoken first** (npx, then python) before falling back to estimation
+- If using estimation, warn user about potential inaccuracy
 - User can modify order before confirming
 - Intent nodes (proper structure) are skipped—already captured
 - Legacy AGENTS.md are extracted and replaced with new intent nodes
 - This skill only plans—actual capture uses @intent-capture
+- Node count heuristics prevent creating too many small nodes

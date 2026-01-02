@@ -1,9 +1,13 @@
 ---
 name: intent-capture
-description: Interactively capture intent node for a directory via SME interview, generate AGENTS.md with LCA resolution
+description: Capture intent node for a directory - supports discovery mode (agentic) and interactive mode (SME interview)
 ---
 
 Capture intent node for: $ARGUMENTS (default: current directory)
+
+**Mode:** Check if `--discovery` flag is present
+- **Discovery mode**: Generate draft without user interaction, collect questions
+- **Interactive mode**: Full SME interview (default for /intent-capture command)
 
 ## Phase 1: Read
 
@@ -58,9 +62,125 @@ Separate concerns:
   - Keep in Patterns & Pitfalls section
   - OR migrate to `.opencode/agent.md` (cleaner separation)
 
-Present migration options during interview if detected.
+Present migration options during interview if detected (interactive mode only).
 
-## Phase 2: Interview
+## Phase 2: Analysis & Draft Generation
+
+Generate draft AGENTS.md based on code analysis:
+
+### Build Mental Model
+
+From the code, identify:
+- **Purpose**: What does this module do? What problem does it solve?
+- **Scope boundaries**: What does it own? What does it NOT own?
+- **Entry points**: Public functions, exports, API endpoints
+- **Contracts**: Parameters, return types, invariants
+- **Dependencies**: External systems, libraries, env vars
+- **Patterns**: Recurring code patterns, conventions used
+- **Anti-patterns**: Code smells, deprecated approaches
+- **Gotchas**: Non-obvious behavior, edge cases
+
+### Self-Answer Questions
+
+For each aspect, attempt to answer from code:
+
+| Question | Answerable from Code? | Action |
+|----------|----------------------|--------|
+| What does this own? | Usually yes | Include in draft |
+| What are the entry points? | Yes | Include in draft |
+| What are the dependencies? | Yes (imports) | Include in draft |
+| Why does X exist? | Sometimes | Include if clear, else question |
+| Is Y deprecated? | Sometimes (comments) | Include if clear, else question |
+| What invariants must hold? | Rarely | Question for SME |
+| What trips up new engineers? | No | Question for SME |
+| Historical context? | No | Question for SME |
+
+### Generate Draft AGENTS.md
+
+Create draft following this template:
+
+```markdown
+# [Module Name]
+
+## Purpose & Scope
+[What this owns. What it explicitly doesn't own.]
+Example: "Owns: payment validation, amount formatting. Does NOT own: persistence, user identity."
+
+## Entry Points & Contracts
+- `function(input): output` — [description]
+- Invariants: [constraints callers must respect]
+
+## Dependencies
+- [External system, library, env var requirement]
+
+## Usage Patterns
+[Canonical correct usage example—code snippet if helpful]
+
+## Anti-Patterns
+❌ [Bad pattern] — [why]
+
+## Downlinks
+- ./child/AGENTS.md — [brief description]
+
+## Outlinks
+- /docs/adr/NNN-decision.md — [why relevant]
+- /docs/diagrams/flow.png — [what it shows]
+
+## Patterns & Pitfalls
+- [Gotcha]
+- [Historical context]
+- [Non-obvious behavior]
+
+---
+
+## Open Questions
+- ? [Unresolved question—will lift to ancestor or resolve later]
+
+## Pending Tasks
+- [ ] [Refactor discovered during capture]
+- [ ] [Dead code to investigate]
+```
+
+### Assess Confidence
+
+Rate draft confidence:
+- **High**: All major sections filled from code, no ambiguity
+- **Medium**: Most sections filled, some questions for SME
+- **Low**: Significant gaps, needs substantial SME input
+
+## Phase 2a: Discovery Mode Output
+
+**If `--discovery` mode:**
+
+Do NOT prompt user. Return structured output:
+
+```
+DISCOVERY_RESULT:
+  path: [directory path]
+  confidence: [high|medium|low]
+  draft_content: |
+    [full AGENTS.md draft]
+  questions:
+    - category: ownership
+      question: "Does this module own retry logic, or do callers handle it?"
+      context: "I see retry patterns in caller code but also retry helpers here"
+    - category: history
+      question: "Why is there both invoice.ts and legacy_invoice.ts?"
+      context: "legacy_invoice.ts has similar functions with different signatures"
+  legacy_content:
+    - source: "./AGENTS.md"
+      extracted: "Build with yarn, run tests before commit"
+      needs_validation: true
+  lca_candidates:
+    - question: "Who owns shared-types?"
+      likely_parent: "./services/"
+```
+
+Then STOP—do not proceed to interview phases.
+
+## Phase 2b: Interactive Mode - Interview
+
+**If NOT discovery mode (default):**
 
 ### Agent Describes First
 
@@ -168,51 +288,9 @@ SHARED STATE:
 │   • Dead code candidate: old_handler.ts
 ```
 
-## Phase 3: Generate
+## Phase 3: Finalize Draft
 
-Create AGENTS.md following this template:
-
-```markdown
-# [Module Name]
-
-## Purpose & Scope
-[What this owns. What it explicitly doesn't own.]
-Example: "Owns: payment validation, amount formatting. Does NOT own: persistence, user identity."
-
-## Entry Points & Contracts
-- `function(input): output` — [description]
-- Invariants: [constraints callers must respect]
-
-## Dependencies
-- [External system, library, env var requirement]
-
-## Usage Patterns
-[Canonical correct usage example—code snippet if helpful]
-
-## Anti-Patterns
-❌ [Bad pattern] — [why]
-
-## Downlinks
-- ./child/AGENTS.md — [brief description]
-
-## Outlinks
-- /docs/adr/NNN-decision.md — [why relevant]
-- /docs/diagrams/flow.png — [what it shows]
-
-## Patterns & Pitfalls
-- [Gotcha]
-- [Historical context]
-- [Non-obvious behavior]
-
----
-
-## Open Questions
-- ? [Unresolved question—will lift to ancestor or resolve later]
-
-## Pending Tasks
-- [ ] [Refactor discovered during capture]
-- [ ] [Dead code to investigate]
-```
+Apply interview answers (or discovery results) to draft:
 
 ### Generation Guidelines
 
@@ -298,3 +376,4 @@ Write to `[target]/AGENTS.md`
 - **Legacy handling**: Always extract valuable content from existing AGENTS.md before replacing
 - **Agent instructions**: If legacy root has agent rules, present migration options (keep vs move to .opencode/)
 - **Inherited legacy**: When legacy content lifts from child location, acknowledge source in interview
+- **Discovery mode**: Returns structured output without user interaction—used by /intent-init for batch processing
